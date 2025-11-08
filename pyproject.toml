@@ -1,0 +1,11 @@
+[project]
+name = "teacher"
+version = "0.1.0"
+description = "Multi-agent research paper to audio transcript system"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "claude-agent-sdk>=0.1.6",
+    "python-dotenv>=1.0.0",
+    "anyio>=4.0.0",
+]

@@ -1,0 +1,1 @@
+We want to preserve **all mathematical content** like $x^2 + y^2$.
