@@ -23,9 +23,5 @@ wheels/
 # OS
 .DS_Store
 Thumbs.db
+papers
 
-# Application
-*.tex
-sample_paper.tex
-output/
-papers/
