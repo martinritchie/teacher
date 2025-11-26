@@ -21,7 +21,3 @@ The autoencoder established in the previous section creates a robust, high-fidel
 Here's the transformation the authors implement. They group a sequence of T tokens into L non-overlapping chunks, where L equals T divided by K. The encoder then transforms this original sequence into a more compact sequence of continuous vectors, where each vector z represents the encoding of one chunk.
 
 The autoregressive structure is preserved—the model still predicts the next element given all previous elements. But the mechanism must be fundamentally redesigned. Standard language models use a softmax layer to compute a probability distribution over a finite vocabulary. The authors' model must instead predict a vector within an infinite-dimensional continuous space.
-
-This reformulation introduces two critical challenges. First, during training, the likelihood of each predicted vector becomes intractable, precluding maximum likelihood estimation and the standard cross-entropy loss. Second, evaluation metrics like perplexity, which derive directly from the model's likelihood, can no longer be computed.
-
-The authors address both challenges with novel solutions. They introduce a likelihood-free approach to training based on strictly proper scoring rules, and they propose a likelihood-free evaluation methodology using reconstruction accuracy. Both represent significant departures from standard language modeling practice, but they enable effective prediction in continuous space—a key contribution of this work.

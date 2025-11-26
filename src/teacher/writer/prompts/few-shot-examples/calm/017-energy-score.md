@@ -24,6 +24,6 @@ Let's understand what each term accomplishes. The diversity term encourages the 
 
 The fidelity term drives predictions toward ground truth. Because of the negative sign, predictions close to the observation contribute a small penalty, while predictions far away contribute a large penalty. Maximizing the score therefore requires predictions that cluster near the ground truth.
 
-The score is strictly proper for any alpha between zero and two, where alpha controls how distances are measured. The authors typically set alpha to one, giving them Euclidean distance.
+The score is strictly proper for any alpha between zero and two, where alpha controls how distances are measured. The authors typically set alpha to one, giving them Manhattan distance.
 
 While the expectations in the Energy Score formula make it intractable to compute exactly, the authors construct an unbiased Monte Carlo estimator to serve as their practical loss function. This is where the sampling strategy becomes critical.

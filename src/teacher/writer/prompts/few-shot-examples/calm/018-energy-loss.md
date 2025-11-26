@@ -14,12 +14,6 @@ In practice, we set $N = 8$ and $M = 100$. The number of model samples $N$ direc
 
 ## Teacher
 
-The authors build their training objective using the Energy Score, a strictly proper scoring rule that has proven effective across generative applications. The Energy Score is entirely likelihood-free—rather than evaluating probability densities, it measures alignment between prediction and observation through sample distances.
-
-Here's how it works. The score has two terms with complementary roles. The first term measures the expected distance between predictions and the ground truth observation. If predictions are close to ground truth, this distance is small. If predictions are far away, this distance is large. Minimizing the loss therefore pushes predictions toward ground truth.
-
-The second term measures the expected distance between pairs of independently sampled predictions. Here's the crucial detail: it has a negative sign in front. If the model always produces the same output—the collapsed case—this distance is zero, and subtracting zero provides no benefit. If the model produces diverse samples, this distance is large, and subtracting it reduces the overall loss. When training minimizes the loss, it benefits from this diversity term, encouraging the model to produce varied samples. The score is strictly proper for any alpha between zero and two; typically alpha equals one.
-
 While the expectations in the Energy Score formula make it intractable to compute exactly, the authors construct an unbiased Monte Carlo estimator to serve as their practical loss function.
 
 At each step, the authors draw N candidate samples from the generative head—these are the model's predictions. But there's a subtle advantage in their setup: the autoencoder doesn't map a token chunk to a fixed point, but rather to a conditional Gaussian posterior. Relying on a single sample as ground truth would introduce high variance into the energy loss. To stabilize training, the authors draw M target samples from this posterior.
