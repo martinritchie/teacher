@@ -6,10 +6,10 @@ from typing import Annotated
 import typer
 from elevenlabs import ElevenLabs, VoiceSettings
 
-from teacher.speaker.audio import chunk_text, concatenate_audio_files
+from teacher.speak.audio import chunk_text, concatenate_audio_files
 from teacher.utils import get_settings, get_step_dir_from_pdf, parse_section_selection
 
-speaker_app = typer.Typer()
+speak_app = typer.Typer()
 
 
 def _generate_audio_chunk(
@@ -30,7 +30,7 @@ def _generate_audio_chunk(
             f.write(chunk)
 
 
-@speaker_app.command()
+@speak_app.command()
 def generate(
     pdf_path: Annotated[Path, typer.Argument(help="Path to PDF file")],
     sections: Annotated[
@@ -56,20 +56,20 @@ def generate(
     """
     settings = get_settings()
     base_dir = pdf_path.parent
-    speaker_dir = get_step_dir_from_pdf(pdf_path, "speaker")
-    writer_dir = base_dir / "writer"
+    speak_dir = get_step_dir_from_pdf(pdf_path, "speak")
+    narrate_dir = base_dir / "narrate"
     voice_id = voice_id or settings.elevenlabs_voice_id
 
-    # Find all writer section files
-    if not writer_dir.exists():
+    # Find all narrate section files
+    if not narrate_dir.exists():
         raise FileNotFoundError(
-            f"Writer directory not found at {writer_dir}. Run 'writer process_sections' first."
+            f"Narrate directory not found at {narrate_dir}. Run 'narrate process_sections' first."
         )
 
-    all_section_files = sorted(writer_dir.glob("[0-9]*.md"))
+    all_section_files = sorted(narrate_dir.glob("[0-9]*.md"))
     if not all_section_files:
         raise FileNotFoundError(
-            f"No section files found in {writer_dir}. Run 'writer process_sections' first."
+            f"No section files found in {narrate_dir}. Run 'narrate process_sections' first."
         )
 
     # Parse section selection
@@ -79,7 +79,7 @@ def generate(
         typer.echo(f"Error: {e}", err=True)
         raise typer.Exit(1)
 
-    audio_files = []
+    chapters: list[tuple[str, list[Path]]] = []
     total_chars = 0
 
     for section_file in section_files:
@@ -87,7 +87,10 @@ def generate(
         text_len = len(text)
         total_chars += text_len
 
-        # Check if text needs chunking
+        # Derive chapter title: "000-abstract" → "Abstract"
+        title = " ".join(section_file.stem.split("-")[1:]).title() or section_file.stem
+
+        section_audio: list[Path] = []
         if text_len > settings.tts_chunk_size:
             typer.echo(
                 f"Processing {section_file.stem}... ({text_len} chars - splitting into chunks)"
@@ -96,31 +99,32 @@ def generate(
             for i, chunk in enumerate(chunks):
                 chunk_len = len(chunk)
                 chunk_num = i + 1
-                audio_file = (
-                    speaker_dir / f"{section_file.stem}-part-{chunk_num:03d}.mp3"
-                )
+                audio_file = speak_dir / f"{section_file.stem}-part-{chunk_num:03d}.mp3"
                 typer.echo(
                     f"  Chunk {chunk_num}: {chunk_len} chars → {audio_file.name}"
                 )
                 _generate_audio_chunk(chunk, audio_file, voice_id, settings)
-                audio_files.append(audio_file)
+                section_audio.append(audio_file)
         else:
             typer.echo(f"Processing {section_file.stem}... ({text_len} chars)")
-            audio_file = speaker_dir / f"{section_file.stem}.mp3"
+            audio_file = speak_dir / f"{section_file.stem}.mp3"
             _generate_audio_chunk(text, audio_file, voice_id, settings)
-            audio_files.append(audio_file)
+            section_audio.append(audio_file)
 
-    # Concatenate all audio files
-    if audio_files:
-        output = speaker_dir / "output.mp3"
+        chapters.append((title, section_audio))
+
+    # Concatenate all audio files into M4B with chapter markers
+    if chapters:
+        num_files = sum(len(files) for _, files in chapters)
+        output = speak_dir / "output.m4b"
         typer.echo(
-            f"\nConcatenating {len(audio_files)} audio files ({len(section_files)} sections) → {output.name}"
+            f"\nConcatenating {num_files} audio files ({len(chapters)} chapters) → {output.name}"
         )
-        concatenate_audio_files(audio_files, output)
+        concatenate_audio_files(chapters, output)
         typer.echo(f"✓ Audio saved to: {output} (total: {total_chars} chars)")
 
 
-@speaker_app.command()
+@speak_app.command()
 def list_voices() -> None:
     """List available voices from ElevenLabs."""
     settings = get_settings()

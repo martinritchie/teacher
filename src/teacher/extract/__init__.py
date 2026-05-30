@@ -14,16 +14,16 @@ from claude_agent_sdk import (
 )
 from claude_agent_sdk.types import McpStdioServerConfig
 
-from teacher.reader.prompts import get_reader_prompt
+from teacher.extract.prompts import get_extract_prompt
 from teacher.utils import get_settings, get_step_dir_from_pdf
 
-reader_app = typer.Typer()
+extract_app = typer.Typer()
 
 
 async def convert_async(pdf_path: Path, model: str | None = None) -> None:
     """Async conversion logic using ClaudeSDKClient."""
     settings = get_settings()
-    output_dir = get_step_dir_from_pdf(pdf_path, "reader")
+    output_dir = get_step_dir_from_pdf(pdf_path, "extract")
     mcp_config = McpStdioServerConfig(
         command="npx",
         args=["-y", "@sylphxai/pdf-reader-mcp"],
@@ -31,14 +31,16 @@ async def convert_async(pdf_path: Path, model: str | None = None) -> None:
 
     options = ClaudeAgentOptions(
         mcp_servers={"pdf-reader": mcp_config},
-        model=model or settings.reader_model,
+        model=model or settings.extract_model,
         permission_mode="acceptEdits",
         max_buffer_size=1024 * 1024 * 50,
         env={"ANTHROPIC_API_KEY": settings.anthropic_api_key.get_secret_value()},
     )
 
     async with ClaudeSDKClient(options=options) as client:
-        prompt = get_reader_prompt(str(pdf_path.absolute()), str(output_dir.absolute()))
+        prompt = get_extract_prompt(
+            str(pdf_path.absolute()), str(output_dir.absolute())
+        )
         await client.query(prompt)
 
         async for message in client.receive_response():
@@ -53,12 +55,12 @@ async def convert_async(pdf_path: Path, model: str | None = None) -> None:
                 typer.echo(f"✓ Conversion complete (${message.total_cost_usd:.4f})")
 
 
-@reader_app.command()
+@extract_app.command()
 def convert(
     pdf_path: Annotated[Path, typer.Argument(help="Path to PDF file")],
     model: Annotated[
         str | None,
-        typer.Option(help=f"Model name (default: {get_settings().reader_model})"),
+        typer.Option(help=f"Model name (default: {get_settings().extract_model})"),
     ] = None,
 ) -> None:
     """Convert PDF to markdown sections alongside the PDF."""

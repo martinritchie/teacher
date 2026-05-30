@@ -1,4 +1,4 @@
-.PHONY: format lint fix check help install reinstall clean
+.PHONY: format lint fix check help install reinstall clean test
 
 help:
 	@echo "Teacher - Research paper to audio transcript system"
@@ -10,6 +10,7 @@ help:
 	@echo "  make format      Format code with ruff"
 	@echo "  make lint        Check code quality"
 	@echo "  make check       Format and lint"
+	@echo "  make test        Run the test suite"
 	@echo "  make help        Show this help message"
 
 install:
@@ -32,3 +33,6 @@ lint:
 
 check: format lint
 	@echo "✓ Code formatting and linting complete"
+
+test:
+	uv run pytest

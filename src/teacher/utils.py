@@ -15,31 +15,31 @@ class Settings(BaseSettings):
         case_sensitive=False,
     )
 
-    # Reader settings
-    reader_model: str = Field(
+    # Extract settings
+    extract_model: str = Field(
         default="claude-haiku-4-5",
         description="Model to use for PDF reading",
     )
 
-    # Writer settings
-    writer_model: str = Field(
+    # Narrate settings
+    narrate_model: str = Field(
         default="claude-sonnet-4-5",
         description="Model to use for narrative generation",
     )
-    writer_max_tokens: int = Field(
+    narrate_max_tokens: int = Field(
         default=5000,
-        description="Maximum tokens for writer output",
+        description="Maximum tokens for narrate output",
     )
-    writer_thinking_budget: int = Field(
+    narrate_thinking_budget: int = Field(
         default=1600,
         description="Budget tokens for extended thinking",
     )
-    writer_examples_dir: Path | None = Field(
+    narrate_examples_dir: Path | None = Field(
         default=None,
-        description="Path to writer examples directory",
+        description="Path to narrate examples directory",
     )
 
-    # Speaker settings
+    # Speak settings
     elevenlabs_api_key: SecretStr = Field(
         default="",
         description="ElevenLabs API key (secret)",
@@ -69,8 +69,8 @@ class Settings(BaseSettings):
     @property
     def resolved_examples_dir(self) -> Path:
         """Resolve examples directory with fallback to cwd."""
-        if self.writer_examples_dir:
-            return self.writer_examples_dir
+        if self.narrate_examples_dir:
+            return self.narrate_examples_dir
         return Path.cwd() / "prompts" / "teacher-examples"
 
 
@@ -86,7 +86,7 @@ def get_step_dir_from_pdf(pdf_path: Path, step_name: str) -> Path:
 
     Args:
         pdf_path: Path to the source PDF file
-        step_name: Name of the step ('reader', 'writer', 'speaker')
+        step_name: Name of the step ('extract', 'narrate', 'speak')
 
     Returns:
         Path to the step directory
@@ -96,44 +96,44 @@ def get_step_dir_from_pdf(pdf_path: Path, step_name: str) -> Path:
     return step_dir
 
 
-def find_reader_sections(base_dir: Path) -> Path:
-    """Get the reader output directory (where markdown sections are stored).
+def find_extract_sections(base_dir: Path) -> Path:
+    """Get the extract output directory (where markdown sections are stored).
 
     Args:
-        base_dir: Base directory containing reader/ subdirectory
+        base_dir: Base directory containing extract/ subdirectory
 
     Returns:
-        Path to the reader directory
+        Path to the extract directory
 
     Raises:
         FileNotFoundError: If no markdown sections are found
     """
-    reader_dir = base_dir / "reader"
-    if not list(reader_dir.glob("[0-9]*.md")):
+    extract_dir = base_dir / "extract"
+    if not list(extract_dir.glob("[0-9]*.md")):
         raise FileNotFoundError(
-            f"No markdown sections found in {reader_dir}. Run 'reader convert' first."
+            f"No markdown sections found in {extract_dir}. Run 'extract convert' first."
         )
-    return reader_dir
+    return extract_dir
 
 
-def find_writer_output(base_dir: Path) -> Path:
-    """Get the writer output file.
+def find_narrate_output(base_dir: Path) -> Path:
+    """Get the narrate output file.
 
     Args:
-        base_dir: Base directory containing writer/ subdirectory
+        base_dir: Base directory containing narrate/ subdirectory
 
     Returns:
-        Path to the writer script file
+        Path to the narrate script file
 
     Raises:
         FileNotFoundError: If script is not found
     """
-    writer_file = base_dir / "writer" / "script.md"
-    if not writer_file.exists():
+    narrate_file = base_dir / "narrate" / "script.md"
+    if not narrate_file.exists():
         raise FileNotFoundError(
-            f"Script not found at {writer_file}. Run 'writer process_sections' first."
+            f"Script not found at {narrate_file}. Run 'narrate process_sections' first."
         )
-    return writer_file
+    return narrate_file
 
 
 def parse_section_selection(
