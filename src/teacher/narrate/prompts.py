@@ -1,4 +1,4 @@
-"""Utilities for loading writer prompts and few-shot examples."""
+"""Utilities for loading narrate prompts and few-shot examples."""
 
 from pathlib import Path
 from typing import Any
@@ -39,22 +39,22 @@ class FewShotExample(BaseModel):
         ]
 
 
-def writer_narrative() -> str:
-    """Load the writer system prompt.
+def narrative_prompt() -> str:
+    """Load the narrate system prompt.
 
     Returns:
-        Writer system prompt for converting academic text to audio narratives
+        Narrate system prompt for converting academic text to audio narratives
     """
-    return Path(SYSTEM_PATH, "writer-narrative.md").read_text()
+    return Path(SYSTEM_PATH, "narrative.md").read_text()
 
 
-def writer_normalizer() -> str:
+def normalizer_prompt() -> str:
     """Load the ElevenLabs technical narrator prompt.
 
     Returns:
         Narrator configuration prompt for TTS
     """
-    return Path(SYSTEM_PATH, "writer-elevenlabs.md").read_text()
+    return Path(SYSTEM_PATH, "elevenlabs.md").read_text()
 
 
 def get_few_shot_examples() -> list[FewShotExample]:
