@@ -35,6 +35,18 @@ def chunk_text(text: str, max_chars: int = 38000) -> list[str]:
     if current_sentence:
         sentences.append(current_sentence)
 
+    # Hard-split any single sentence that alone exceeds the limit, so the
+    # grouping loop below only ever sees sentences that can fit in a chunk.
+    bounded = []
+    for sentence in sentences:
+        if len(sentence) > max_chars:
+            bounded.extend(
+                sentence[i : i + max_chars] for i in range(0, len(sentence), max_chars)
+            )
+        else:
+            bounded.append(sentence)
+    sentences = bounded
+
     # Group sentences into chunks
     for sentence in sentences:
         if len(current_chunk) + len(sentence) <= max_chars:
