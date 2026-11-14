@@ -9,17 +9,16 @@ description = "Multi-agent research paper to audio transcript system"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    "claude-agent-sdk",
-    "python-dotenv>=1.0.0",
+    "kokoro>=0.9.4",
+    "ollama>=0.6.3",
+    "pymupdf4llm>=2.1",
+    "soundfile>=0.14.0",
+    "trafilatura>=2.3.1",
     "typer>=0.20.0",
-    "pydantic-settings>=2.0.0",
-    "anthropic>=0.72.1",
-    "pydantic>=2.12.4",
-    "elevenlabs>=2.23.0",
 ]
 
 [project.scripts]
-teacher = "teacher.__init__:app"
+teacher = "teacher.cli:app"
 
 [tool.uv]
 package = true
@@ -29,3 +28,6 @@ dev = [
     "pytest>=9.0.3",
     "ruff>=0.14.4",
 ]
+
+[tool.pytest.ini_options]
+markers = ["slow: loads real models"]

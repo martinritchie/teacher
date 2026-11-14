@@ -6,43 +6,22 @@ Converts ML/AI papers into an audio only format, like a podcast.
 
 I am a busy parent, this helps me keep on top of reading: doing the dishes, driving and that sort of thing. No replacement for reading but better than no reading.
 
-## Getting Started 
+## Usage
 
-### Env
-
-Set your api keys, see `./env.example`.
-
-### Installation
+Install [Ollama](https://ollama.com), pull a model, and install espeak-ng for Kokoro:
 
 ```bash
-git clone ...
-uv sync --all-extras
-teacher --help
+ollama pull gemma3:12b
+sudo apt install espeak-ng  # Ubuntu
+uv sync
 ```
 
-## Data Flow 
-
-1. A anthropic [haiku](https://assets.anthropic.com/m/99128ddd009bdcb/Claude-Haiku-4-5-System-Card.pdf) based agent parses a pdf into markdown.
+One command turns a PDF path, PDF URL, arXiv abs URL or blog post URL into `<out>/<name>.md` (the script) and `<out>/<name>.mp3`:
 
 ```bash
-teacher reader --help
+uv run teacher run https://arxiv.org/abs/2510.27688 --minutes 20
 ```
 
-2. A direct LLM call prompted with few shot examples as well as a markdown paper section from `reader`.
+Options: `--model` (Ollama tag, default `gemma3:12b`), `--voice` (Kokoro voice, default `af_heart`), `--minutes` (default 25), `--chunk` (max source tokens per call, default 4000; lower it if the run stops with a cut prompt), `--out` (default `out`).
 
-```bash
-teacher writer --help
-```
-
-3. A TTS service is then used to produce the audio:
-
-```bash
-teacher speaker --help
-```
-
-4. Development pipeline for quick iteration:
-
-```bash
-teacher dev --help
-```
 ## Development Plan
