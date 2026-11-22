@@ -21,7 +21,10 @@ def run(
     source: Annotated[
         str, typer.Argument(help="PDF path, PDF URL, arXiv abs URL, or blog post URL")
     ],
-    model: str = typer.Option(SCRIPT_MODEL, help="Script model served by vLLM"),
+    model: str = typer.Option(
+        SCRIPT_MODEL,
+        help="Script model: served by vLLM, or claude-* on the Anthropic API",
+    ),
     voice: str = typer.Option(VOICE, help=f"{VOICE_MODEL} speaker"),
     minutes: int = typer.Option(25, help="Upper limit on the length of the audio"),
     chunk: int = typer.Option(4000, help="Max source tokens per chunk"),

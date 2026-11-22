@@ -22,7 +22,7 @@ from teacher.part import (
     Term,
     write_part,
 )
-from teacher.settings import THINKING, WORDS_PER_MINUTE
+from teacher.settings import WORDS_PER_MINUTE
 from teacher.speech import unspoken
 
 MAX_SECTION_CHARS = 12000  # about 3k tokens of abstract, introduction or conclusion
@@ -75,8 +75,8 @@ class Method(BaseModel):
 _abstract_reader = agent("episode/abstract", Abstract)
 _contributions_writer = agent("episode/contributions", Contributions)
 _section_notes = agent("plan/section_notes")
-_planner = agent("plan/planner", Method, THINKING)
-_detailer = agent("plan/detailer", Detail, THINKING)
+_planner = agent("plan/planner", Method, thinks=True)
+_detailer = agent("plan/detailer", Detail, thinks=True)
 
 
 def split_into_chunks(markdown: str, model: str, max_tokens: int) -> list[str]:

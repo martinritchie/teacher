@@ -17,6 +17,7 @@ Flow under test:
 import functools
 import json
 import re
+import threading
 from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
@@ -29,12 +30,19 @@ from pydantic_ai.models.function import AgentInfo, FunctionModel
 from pydantic_ai.profiles import ModelProfile
 from typer.testing import CliRunner
 
+import teacher.commands.evaluate as eval_mod
 import teacher.commands.run as run_mod
 import teacher.llm as llm_mod
 import teacher.servers as servers
 import teacher.source as source
 from teacher.cli import app
-from teacher.settings import SAMPLE_RATE, VOICE_MODEL, WORDS_PER_MINUTE
+from teacher.settings import (
+    JUDGE_MODEL,
+    SAMPLE_RATE,
+    VOICE_MODEL,
+    WORDS_PER_MINUTE,
+    profile,
+)
 
 PDF = next((Path(__file__).parents[1] / "papers").glob("CALM*/*.pdf"))
 SMALL_MODEL = "Qwen/Qwen3-0.6B"  # only its tokenizer is downloaded
@@ -97,13 +105,13 @@ def llm(monkeypatch):
     calls.gaps, calls.quote = [], None
     calls.settings, calls.components = {}, None
 
-    def reply(messages, info: AgentInfo):
+    def reply(messages, info: AgentInfo, model: str):
         if calls.error:
             raise calls.error
         phase = PHASES[info.instructions.splitlines()[0]]
         prompt = str(messages[-1].parts[-1].content)  # a retry's content is a list
         calls.settings[phase] = info.model_settings
-        calls.append(SimpleNamespace(phase=phase, prompt=prompt))
+        calls.append(SimpleNamespace(phase=phase, prompt=prompt, model=model))
         k = len(calls.of(phase))
         problems = calls.verdicts.pop(0) if phase == "check" and calls.verdicts else []
         n = len(re.findall(r'<chunk number="', prompt))
@@ -129,14 +137,19 @@ def llm(monkeypatch):
         calls.started += 1
         yield "http://server"
 
+    def stub(
+        name,
+    ):  # named like the real model, since its settings are looked up by name
+        return FunctionModel(lambda m, i: reply(m, i, name), model_name=name, profile=ModelProfile(supports_json_schema_output=True))  # fmt: skip
+
     def model(name, provider):
         calls.served = name
-        return FunctionModel(
-            reply, profile=ModelProfile(supports_json_schema_output=True)
-        )
+        return stub(name)
 
     monkeypatch.setattr(servers, "vllm_server", no_server)
     monkeypatch.setattr(servers, "OpenAIChatModel", model)
+    monkeypatch.setattr(servers, "claude", stub)  # no Anthropic API calls in tests
+    monkeypatch.setattr(eval_mod, "claude", stub)
     monkeypatch.setattr(
         llm_mod, "PARALLEL", 1
     )  # stub replies are numbered in call order
@@ -799,7 +812,7 @@ def test_independent_calls_run_in_parallel_in_order(llm, tmp_path, monkeypatch):
     cases = [{"tree": str(tmp_path / "x.outline.json"), "node": n, "facts": [f"{n} fact {i}." for i in "ab"]} for n in ("Encoder", "Loss", "Distance term")]  # fmt: skip
     (tmp_path / "cases.json").write_text(json.dumps(cases))
     output = cli("eval", tmp_path / "cases.json", "--out", tmp_path)
-    assert [line.split()[0] for line in output.splitlines()[1:4]] == [
+    assert [line.split()[0] for line in output.splitlines()[2:5]] == [
         "Encoder",
         "Loss",
         "Distance",
@@ -811,3 +824,62 @@ def test_independent_calls_run_in_parallel_in_order(llm, tmp_path, monkeypatch):
         .splitlines()
     )
     assert len(trace) == len(llm)  # every call traced, none lost to a race
+
+
+# --- Models: settings by family, Claude on the API, a fixed judge, one cap on calls in flight ---
+
+
+def test_eval_judges_with_the_fixed_judge_whatever_narrates(llm, tmp_path):
+    """The narration comes from --model; every judge call goes to settings.JUDGE_MODEL, and the report says which is which."""
+    (tmp_path / "x.outline.json").write_text(json.dumps(TREE))
+    cases = [{"tree": str(tmp_path / "x.outline.json"), "node": "Encoder", "facts": ["It maps tokens."]}]  # fmt: skip
+    (tmp_path / "cases.json").write_text(json.dumps(cases))
+    output = cli("eval", tmp_path / "cases.json", "--out", tmp_path)
+    assert {c.model for c in llm.of("judge")} == {JUDGE_MODEL}
+    assert {c.model for c in llm if c.phase != "judge"} == {SMALL_MODEL}
+    assert f"narrated by {SMALL_MODEL}, judged by {JUDGE_MODEL}" in output
+
+
+def test_a_claude_model_runs_on_the_api_with_its_own_settings(llm, tmp_path):
+    """--model claude-* starts no vLLM server. Its calls get Claude's settings: effort by role, no sampling settings."""
+    (tmp_path / "x.outline.json").write_text(json.dumps(TREE))
+    args = ["write", tmp_path / "x.outline.json", "--node", "Encoder", "--out", tmp_path, "--model", "claude-sonnet-5-5"]  # fmt: skip
+    result = CliRunner().invoke(app, list(map(str, args)))
+    assert result.exit_code == 0, result.output
+    assert llm.started == 0 and {c.model for c in llm} == {"claude-sonnet-5-5"}
+    assert llm.settings["method"]["anthropic_effort"] == "low"
+    assert llm.settings["check"]["anthropic_effort"] == "high"
+    assert not any("temperature" in s or "top_p" in s for s in llm.settings.values())
+
+
+def test_a_model_with_no_profile_is_an_error():
+    """Settings are looked up by model family; an unknown family says where to add one."""
+    with pytest.raises(ValueError, match="PROFILES"):
+        profile("gemma-4-12b")
+
+
+def test_calls_in_flight_are_capped_however_parallel_nests(llm, tmp_path, monkeypatch):
+    """Every model call holds one of PARALLEL slots, so nested `parallel` calls (cases, then notes, then facts) cannot
+    exceed it; and nesting cannot deadlock."""
+    held, most = [0], [0]
+
+    class Slots:
+        def __init__(self):
+            self.inner = threading.BoundedSemaphore(2)
+
+        def __enter__(self):
+            self.inner.acquire()
+            held[0] += 1
+            most[0] = max(most[0], held[0])
+
+        def __exit__(self, *exc):
+            held[0] -= 1
+            self.inner.release()
+
+    monkeypatch.setattr(llm_mod, "PARALLEL", 4)
+    monkeypatch.setattr(llm_mod, "_slots", Slots())
+    (tmp_path / "x.outline.json").write_text(json.dumps(TREE))
+    cases = [{"tree": str(tmp_path / "x.outline.json"), "node": n, "facts": ["A.", "B."]} for n in ("Method", "Loss", "Encoder")]  # fmt: skip
+    (tmp_path / "cases.json").write_text(json.dumps(cases))
+    cli("eval", tmp_path / "cases.json", "--out", tmp_path)
+    assert 1 <= most[0] <= 2 and len(llm) > 20

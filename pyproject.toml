@@ -9,9 +9,10 @@ description = "Turn ML papers into podcast-style audio with local models"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    "anthropic>=0.108,<1",
     "jinja2>=3.1",
     "mineru[full]>=4.2",
-    "pydantic-ai-slim[openai]>=2.31.1",
+    "pydantic-ai-slim[anthropic,openai]>=2.31.1",
     "semchunk>=4.1",
     "soundfile>=0.14.0",
     "trafilatura>=2.3.1",

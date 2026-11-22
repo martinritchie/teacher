@@ -11,7 +11,6 @@ from pydantic import BaseModel, Field
 from pydantic_ai.models import Model
 
 from teacher.llm import Problems, agent, ask, ask_until
-from teacher.settings import THINKING
 from teacher.speech import unspoken
 
 MAX_PART_WORDS = 300  # a longer part pads; --minutes only ever shortens
@@ -73,7 +72,7 @@ class Reconstruction(BaseModel):
 
 _writer = agent("part/writer")
 _listener = agent("part/listener", Reconstruction)
-_checker = agent("part/checker", Problems, THINKING)
+_checker = agent("part/checker", Problems, thinks=True)
 
 
 def component(

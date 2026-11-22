@@ -19,7 +19,6 @@ from pydantic_ai.models import Model
 
 from teacher.llm import Problems, agent, ask, ask_until, parallel
 from teacher.part import MAX_PART_WORDS, MAX_SOURCE_CHARS, Brief, component, write_part
-from teacher.settings import THINKING
 
 MAX_DEPTH = 4  # levels below the top-level sections
 MIN_SPLIT_CHARS = 1500  # shorter text is one idea
@@ -56,9 +55,9 @@ class Notes(BaseModel):
     )
 
 
-_splitter = agent("tree/splitter", Split, THINKING)
+_splitter = agent("tree/splitter", Split, thinks=True)
 _note_taker = agent("tree/note_taker", Notes)
-_notes_verifier = agent("tree/notes_verifier", Problems, THINKING)
+_notes_verifier = agent("tree/notes_verifier", Problems, thinks=True)
 
 
 def build_tree(markdown: str, llm: Model) -> list[Node]:

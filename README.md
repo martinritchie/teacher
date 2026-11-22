@@ -68,7 +68,7 @@ uv run teacher run paper.pdf --no-audio                             # script onl
 
 | Option | Default | |
 |---|---|---|
-| `--model` | `Qwen/Qwen3-14B-AWQ` | Hugging Face model that vLLM serves for the script. The server flags in `settings.py` assume a Qwen3 model |
+| `--model` | `Qwen/Qwen3-14B-AWQ` | The script model: a Hugging Face model that vLLM serves, or `claude-*` on the Anthropic API (see [Models](#models)) |
 | `--voice` | `ryan` | Qwen3-TTS speaker; `aiden` is the other native English voice |
 | `--minutes` | `25` | Upper limit on the length of the audio. Each method part's word target comes from the outline (capped at 300 words) and only shrinks if the total does not fit |
 | `--chunk` | `4000` | Max source tokens per section; longer sections are split. Lower it if vLLM rejects a call as too long |
@@ -84,6 +84,12 @@ uv run teacher run paper.pdf --no-audio                             # script onl
 | `MINERU_PROCESSING_WINDOW_SIZE` | `8` | Pages held in RAM at once |
 | `TORCHINDUCTOR_COMPILE_THREADS` | `1` | Keeps the vLLM compile step's RAM down |
 | `MINERU_TELEMETRY_DISABLED` | `1` | MinerU sends usage telemetry by default |
+
+## Models
+
+Each model family has a profile in `settings.PROFILES`, matched by the start of the model's name: its `vllm serve` flags, and the model settings for agents that write and for agents that plan or check. `Qwen/Qwen3-` is set up for local vLLM; `claude-` runs on the Anthropic API, with effort `low` for writing and `high` for planning and checking, and a server-side fallback model if Claude declines a request. To try another family, add its profile; an unknown family stops with an error naming `PROFILES`.
+
+Claude models need an Anthropic API key, read from the `CLAUDE_API_KEY` environment variable or a `CLAUDE_API_KEY=...` (or `export CLAUDE_API_KEY=...`) line in the repo's `.env`, which git ignores.
 
 ## Outputs
 
@@ -120,7 +126,7 @@ uv run teacher write evals/trees/2510.27688v1.outline.json --node "3.3.2" --serv
 uv run teacher outline paper.pdf --server http://127.0.0.1:8000       # a new tree; also takes a .md file
 ```
 
-`evals/cases.json` lists nodes of two papers, each with three to six facts its narration must state; `evals/trees/` holds the outline trees they come from, kept fixed so runs are comparable. `teacher eval` narrates each node, and a judge checks one fact per call: `stated`, `missing` or `contradicted`, with a quote from the narration that code checks is really there. A verdict whose quote is not in the narration counts as missing. The score varies from run to run, because each run writes new narrations, so judge a prompt change by a clear shift in the total, not by single facts. `--note-rounds 0` turns off the notes verifier, to measure what it adds.
+`evals/cases.json` lists nodes of two papers, each with three to six facts its narration must state; `evals/trees/` holds the outline trees they come from, kept fixed so runs are comparable. `teacher eval` narrates each node with `--model`, and a fixed judge (`settings.JUDGE_MODEL`, Claude Sonnet 5.5, whatever model narrates) checks one fact per call: `stated`, `missing` or `contradicted`, with a quote from the narration that code checks is really there. A verdict whose quote is not in the narration counts as missing. The score varies from run to run, because each run writes new narrations, so judge a prompt change by a clear shift in the total, not by single facts. `--note-rounds 0` turns off the notes verifier, to measure what it adds. `--model claude-sonnet-5-5` narrates with Claude instead of the local model: a ceiling run, to see how much of the gap is the model and how much the prompts. Model calls in flight are capped at `PARALLEL` across all threads.
 
 ## Development
 

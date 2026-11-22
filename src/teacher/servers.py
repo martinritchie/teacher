@@ -1,4 +1,5 @@
-"""Local vLLM servers, each running only while its stage needs the GPU."""
+"""The script and voice models: local vLLM servers, each running only while its stage needs the GPU, or Claude
+on the Anthropic API for a model named claude-*."""
 
 import os
 import signal
@@ -13,18 +14,26 @@ from pathlib import Path
 import httpx
 import typer
 from pydantic_ai.exceptions import ModelHTTPError
+from pydantic_ai.models import Model
+from pydantic_ai.models.anthropic import AnthropicModel
 from pydantic_ai.models.openai import OpenAIChatModel
+from pydantic_ai.providers.anthropic import AnthropicProvider
 from pydantic_ai.providers.openai import OpenAIProvider
 
-from teacher.settings import SCRIPT_SERVER_ARGS
+from teacher.settings import CLAUDE_KEY, profile
 
 
 @contextmanager
 def serve_script_model(
     model: str, log: Path, server: str | None = None
-) -> Iterator[OpenAIChatModel]:
-    """The script model on vLLM's OpenAI-compatible server, started for this block unless `server` (a URL from `teacher serve`) is given. A call vLLM rejects ends the run."""
-    cmd = ["vllm", "serve", model, *SCRIPT_SERVER_ARGS]
+) -> Iterator[Model]:
+    """The script model for this block: Claude on the Anthropic API for claude-*, otherwise vLLM's
+    OpenAI-compatible server, started here unless `server` (a URL from `teacher serve`) is given. A call the
+    model's server rejects ends the run."""
+    if model.startswith("claude-"):
+        yield claude(model)
+        return
+    cmd = ["vllm", "serve", model, *profile(model)["server"]]
     with nullcontext(server) if server else vllm_server(cmd, log) as url:
         try:
             yield OpenAIChatModel(
@@ -35,6 +44,28 @@ def serve_script_model(
                 f"vLLM rejected a call: {e.body}\nIf it is too long, lower --chunk."
             )
             raise typer.Exit(1)
+
+
+def claude(model: str) -> AnthropicModel:
+    """Claude on the Anthropic API, with the key from the CLAUDE_API_KEY variable or the repo's .env file."""
+    env = Path(__file__).parents[2] / ".env"
+    lines = (
+        [line.strip().removeprefix("export ") for line in env.read_text().splitlines()]
+        if env.exists()
+        else []
+    )
+    found = [
+        line.split("=", 1)[1].strip().strip("'\"")
+        for line in lines
+        if line.startswith(f"{CLAUDE_KEY}=")
+    ]
+    key = os.environ.get(CLAUDE_KEY) or next(iter(found), None)
+    if not key:
+        typer.echo(
+            f"{model} needs an Anthropic API key: set {CLAUDE_KEY}, or add {CLAUDE_KEY}=... to {env}."
+        )
+        raise typer.Exit(1)
+    return AnthropicModel(model, provider=AnthropicProvider(api_key=key))
 
 
 @contextmanager

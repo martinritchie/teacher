@@ -19,7 +19,10 @@ def outline(
             help="PDF path or URL, arXiv abs URL, blog post URL, or Markdown file"
         ),
     ],
-    model: str = typer.Option(SCRIPT_MODEL, help="Script model served by vLLM"),
+    model: str = typer.Option(
+        SCRIPT_MODEL,
+        help="Script model: served by vLLM, or claude-* on the Anthropic API",
+    ),
     out: Path = typer.Option(Path("out/outline"), help="Output directory"),
     server: str = typer.Option(
         None, help="URL of a running `teacher serve`; skips starting vLLM"

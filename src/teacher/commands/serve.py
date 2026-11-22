@@ -7,8 +7,8 @@ from pathlib import Path
 
 import typer
 
-from teacher.servers import SCRIPT_SERVER_ARGS, vllm_server
-from teacher.settings import SCRIPT_MODEL
+from teacher.servers import vllm_server
+from teacher.settings import SCRIPT_MODEL, profile
 
 
 def serve(
@@ -21,7 +21,9 @@ def serve(
     # Stop vLLM (its own process group) on Ctrl-C or `pkill -f "teacher serve"`, even when started in the background.
     signal.signal(signal.SIGINT, signal.default_int_handler)
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
-    with vllm_server(["vllm", "serve", model, *SCRIPT_SERVER_ARGS], log, port) as url:
+    with vllm_server(
+        ["vllm", "serve", model, *profile(model)["server"]], log, port
+    ) as url:
         typer.echo(f"Ready. Use --server {url}")
         try:
             while True:

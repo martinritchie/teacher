@@ -1,7 +1,8 @@
 """Talking to the script model: agents built from prompt files, traced calls, a retry loop, and parallel calls.
 
 An agent named "part/writer" has prompts/part/writer.md as its instructions and renders
-prompts/part/writer_task.md, with the values passed to `ask`, as the message of each call.
+prompts/part/writer_task.md, with the values passed to `ask`, as the message of each call. Its model settings
+come from the profile of whichever model runs it (settings.PROFILES): writing or thinking.
 """
 
 import asyncio
@@ -17,7 +18,7 @@ from pydantic_ai import Agent, NativeOutput
 from pydantic_ai.exceptions import UnexpectedModelBehavior
 from pydantic_ai.models import Model
 
-from teacher.settings import PARALLEL, PROMPTS, WRITING
+from teacher.settings import PARALLEL, PROMPTS, profile
 
 
 class Problems(BaseModel):
@@ -31,6 +32,12 @@ _templates = jinja2.Environment(
 )
 _trace: Path  # every call's prompt and output, one JSON line each
 _trace_lock = threading.Lock()
+_thinks: dict[
+    str, bool
+] = {}  # agent name -> whether it plans or checks (thinking settings)
+_slots = threading.BoundedSemaphore(
+    PARALLEL
+)  # model calls in flight, however deeply `parallel` nests
 
 # Every model call runs on this one event loop, whichever thread asks: the HTTP client's connection
 # pool belongs to the loop that first used it, so calls from `parallel` threads must not bring their own.
@@ -38,23 +45,21 @@ _loop = asyncio.new_event_loop()
 threading.Thread(target=_loop.run_forever, daemon=True).start()
 
 
-def agent(name: str, output=str, settings=WRITING) -> Agent:
+def agent(name: str, output=str, thinks: bool = False) -> Agent:
+    _thinks[name] = thinks
     output = output if output is str else NativeOutput(output)
-    return Agent(
-        name=name,
-        instructions=_render(f"{name}.md"),
-        output_type=output,
-        model_settings=settings,
-    )
+    return Agent(name=name, instructions=_render(f"{name}.md"), output_type=output)
 
 
 def ask(agent: Agent, llm: Model, fallback=None, **values):
     """One call, traced. With a `fallback`, a reply that is not valid output (e.g. thinking that ran out of
     tokens) gives the fallback instead of ending the run."""
     prompt, error = _render(f"{agent.name}_task.md", **values), None
+    settings = profile(llm.model_name)["thinking" if _thinks[agent.name] else "writing"]
     try:
-        run = asyncio.run_coroutine_threadsafe(agent.run(prompt, model=llm), _loop)
-        output = run.result().output
+        with _slots:
+            call = agent.run(prompt, model=llm, model_settings=settings)
+            output = asyncio.run_coroutine_threadsafe(call, _loop).result().output
     except UnexpectedModelBehavior as e:
         if fallback is None:
             raise

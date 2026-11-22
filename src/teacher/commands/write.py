@@ -17,7 +17,10 @@ def write(
         Path, typer.Argument(help="<name>.outline.json from `teacher outline`")
     ],
     node: str = typer.Option(..., help="Title of the node to narrate, or part of it"),
-    model: str = typer.Option(SCRIPT_MODEL, help="Script model served by vLLM"),
+    model: str = typer.Option(
+        SCRIPT_MODEL,
+        help="Script model: served by vLLM, or claude-* on the Anthropic API",
+    ),
     server: str = typer.Option(
         None, help="URL of a running `teacher serve`; skips starting vLLM"
     ),

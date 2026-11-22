@@ -15,29 +15,73 @@ WORDS_PER_MINUTE = 150
 SAMPLE_RATE = 24000
 PAUSE_SECONDS = 0.6  # silence between paragraphs
 
-PARALLEL = 4  # model calls in flight at once; vLLM batches them (continuous batching)
+PARALLEL = 4  # model calls in flight at once, across all threads; vLLM batches them (continuous batching)
 
-# The KV cache is a fixed 3.5 GiB, about 23k tokens of Qwen3-14B: room for a few calls at once next to
-# 9.4 GiB of weights on a 16 GB card (4.5 GiB runs out of memory). vLLM's own estimate collapses on a fresh compile.
-SCRIPT_SERVER_ARGS = [
-    *"--kv-cache-memory-bytes 3758096384 --max-num-seqs 8 --max-num-batched-tokens 2048".split(),
-    *["--max-model-len", str(CONTEXT), "--reasoning-parser", "qwen3"],
-]
+JUDGE_MODEL = "claude-sonnet-5-5"  # `teacher eval`'s judge: fixed, so scores stay comparable as the writer changes
+CLAUDE_KEY = (
+    "CLAUDE_API_KEY"  # read from the environment, or from a line in the repo's .env
+)
 
-# Qwen3's recommended sampling for each mode. Reply caps keep prompt + reply inside CONTEXT:
-# a thinking call can otherwise think until the window is full and return no answer.
-WRITING = {
-    "max_tokens": 2048,
-    "temperature": 0.7,
-    "top_p": 0.8,
-    "extra_body": {"top_k": 20, "chat_template_kwargs": {"enable_thinking": False}},
+# Each served model family's settings, matched by the start of its name. `writing` and `thinking` are the model
+# settings of agents that write and of agents that plan or check; `server` is the extra `vllm serve` flags.
+PROFILES = {
+    # Qwen3's recommended sampling for each mode. Reply caps keep prompt + reply inside CONTEXT: a thinking call
+    # can otherwise think until the window is full and return no answer. The KV cache is a fixed 3.5 GiB, about
+    # 23k tokens of Qwen3-14B, next to 9.4 GiB of weights on a 16 GB card (4.5 GiB runs out of memory); vLLM's
+    # own estimate collapses on a fresh compile.
+    "Qwen/Qwen3-": {
+        "server": [
+            *"--kv-cache-memory-bytes 3758096384 --max-num-seqs 8 --max-num-batched-tokens 2048".split(),
+            *["--max-model-len", str(CONTEXT), "--reasoning-parser", "qwen3"],
+        ],
+        "writing": {
+            "max_tokens": 2048,
+            "temperature": 0.7,
+            "top_p": 0.8,
+            "extra_body": {
+                "top_k": 20,
+                "chat_template_kwargs": {"enable_thinking": False},
+            },
+        },
+        "thinking": {
+            "max_tokens": 6144,
+            "temperature": 0.6,
+            "top_p": 0.95,
+            "extra_body": {
+                "top_k": 20,
+                "chat_template_kwargs": {"enable_thinking": True},
+            },
+        },
+    },
+    # Claude on the Anthropic API: thinking is always adaptive and effort sets its depth; no sampling settings.
+    # A refused request is re-run on a fallback model in the same call (server-side fallback).
+    "claude-": {
+        "server": None,
+        "writing": {
+            "max_tokens": 16000,
+            "anthropic_effort": "low",
+            "anthropic_betas": ["server-side-fallback-2026-07-01"],
+            "extra_body": {"fallbacks": "default"},
+        },
+        "thinking": {
+            "max_tokens": 16000,
+            "anthropic_effort": "high",
+            "anthropic_betas": ["server-side-fallback-2026-07-01"],
+            "extra_body": {"fallbacks": "default"},
+        },
+    },
 }
-THINKING = {
-    "max_tokens": 6144,
-    "temperature": 0.6,
-    "top_p": 0.95,
-    "extra_body": {"top_k": 20, "chat_template_kwargs": {"enable_thinking": True}},
-}
+
+
+def profile(model: str) -> dict:
+    """The settings of the profile whose prefix `model` starts with."""
+    for prefix, settings in PROFILES.items():
+        if model.startswith(prefix):
+            return settings
+    raise ValueError(
+        f"No profile in settings.PROFILES for {model!r}; add one for its family."
+    )
+
 
 for _name, _value in {
     "MINERU_TELEMETRY_DISABLED": "1",

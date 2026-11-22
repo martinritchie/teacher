@@ -11,8 +11,8 @@ from pydantic_ai.models import Model
 
 from teacher.judge import judge
 from teacher.llm import parallel, start_trace
-from teacher.servers import serve_script_model
-from teacher.settings import SCRIPT_MODEL
+from teacher.servers import claude, serve_script_model
+from teacher.settings import JUDGE_MODEL, SCRIPT_MODEL
 from teacher.speech import UNSPOKEN
 from teacher.tree import NOTE_ROUNDS, find_node, load_tree, narrate
 
@@ -22,7 +22,10 @@ def evaluate(
         Path, typer.Argument(help="JSON list of {tree, node, facts}")
     ] = Path("evals/cases.json"),
     only: str = typer.Option(None, help="Run only cases whose node contains this"),
-    model: str = typer.Option(SCRIPT_MODEL, help="Script model served by vLLM"),
+    model: str = typer.Option(
+        SCRIPT_MODEL,
+        help="Model that narrates: served by vLLM, or claude-* on the Anthropic API",
+    ),
     server: str = typer.Option(
         None, help="URL of a running `teacher serve`; skips starting vLLM"
     ),
@@ -34,7 +37,8 @@ def evaluate(
         Path("out/eval"), help="Output directory; each run gets a timestamped report"
     ),
 ):
-    """Narrate each case's node and judge it fact by fact; print a score table, with details in <out>/<time>.md."""
+    """Narrate each case's node and judge it fact by fact with the fixed judge (settings.JUDGE_MODEL), whatever
+    model narrates; print a score table, with details in <out>/<time>.md."""
     todo = [
         c
         for c in json.loads(cases.read_text())
@@ -42,9 +46,14 @@ def evaluate(
     ]
     out.mkdir(parents=True, exist_ok=True)
     stamp = time.strftime("%Y%m%d-%H%M%S")
+    judge_llm = claude(
+        JUDGE_MODEL
+    )  # first, so a missing key stops the run before any narration
     with serve_script_model(model, out / "script-model.log", server) as llm:
         start_trace(out / f"{stamp}.trace.jsonl")
-        results = parallel(lambda case: _run_case(case, llm, note_rounds), todo)
+        results = parallel(
+            lambda case: _run_case(case, llm, judge_llm, note_rounds), todo
+        )
     table = [f"{'node':40} stated  missing  contra  unverified  symbols  words"]
     for case, (narration, judged) in zip(todo, results):
         n = {
@@ -57,6 +66,7 @@ def evaluate(
         sum(len(c["facts"]) for c in todo),
     )
     table.append(f"{'total':40} {total[0]:>3}/{total[1]}")
+    table.insert(0, f"narrated by {model}, judged by {JUDGE_MODEL}")
     report = ["```", *table, "```"]
     for case, (narration, judged) in zip(todo, results):
         report += [f"## {case['node']}", narration, *(f"- **{v}**: {fact} — _{quote}_{' **(' + flag + ')**' if flag else ''}" for fact, (v, quote, flag) in zip(case["facts"], judged)), f"Symbols: {', '.join(_symbols(narration)) or 'none'}"]  # fmt: skip
@@ -65,11 +75,13 @@ def evaluate(
 
 
 def _run_case(
-    case: dict, llm: Model, rounds: int
+    case: dict, llm: Model, judge_llm: Model, rounds: int
 ) -> tuple[str, list[tuple[str, str, str]]]:
     node = find_node(load_tree(Path(case["tree"])), case["node"])
     narration = "\n\n".join(narrate(node, llm, rounds=rounds))
-    return narration, parallel(lambda fact: judge(fact, narration, llm), case["facts"])
+    return narration, parallel(
+        lambda fact: judge(fact, narration, judge_llm), case["facts"]
+    )
 
 
 def _symbols(narration: str) -> list[str]:

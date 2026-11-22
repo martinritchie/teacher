@@ -13,7 +13,6 @@ from pydantic import BaseModel, Field
 from pydantic_ai.models import Model
 
 from teacher.llm import agent, ask
-from teacher.settings import THINKING
 
 
 class Verdict(BaseModel):
@@ -23,7 +22,7 @@ class Verdict(BaseModel):
     )
 
 
-_judge = agent("eval/judge", Verdict, THINKING)
+_judge = agent("eval/judge", Verdict, thinks=True)
 
 
 def judge(fact: str, narration: str, llm: Model) -> tuple[str, str, str]:
