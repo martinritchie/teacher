@@ -22,6 +22,9 @@ from teacher.part import MAX_PART_WORDS, MAX_SOURCE_CHARS, Brief, component, wri
 
 MAX_DEPTH = 4  # levels below the top-level sections
 MIN_SPLIT_CHARS = 1500  # shorter text is one idea
+MIN_OWN_CHARS = (
+    300  # a parent's own text longer than this is narrated before its children
+)
 MAX_SPLIT_CHARS = 28000  # about 7k tokens; longer text is split at its own headings
 NOTE_ROUNDS = 3  # verify-and-revise rounds for a leaf's notes
 WORDS_PER_NOTE = 30  # a leaf's spoken length follows how much there is to say
@@ -87,9 +90,10 @@ def find_node(tree: list[Node], title: str) -> Node:
 def narrate(
     node: Node, llm: Model, heard: str = "", rounds: int = NOTE_ROUNDS
 ) -> list[str]:
-    """One checked spoken part per leaf under `node`, in order. Notes for all leaves are taken at once;
-    parts are written in order, since each continues from the last."""
-    leaves = [(n, siblings) for n, siblings in _walk([node], [node]) if not n.children]
+    """One checked spoken part per leaf under `node`, in order, and one for any parent whose own text, before its
+    first child, is more than a heading or a line. Notes for all parts are taken at once; parts are written in
+    order, since each continues from the last."""
+    leaves = [(n, siblings) for n, siblings in _walk([node], [node]) if not n.children or len(n.text.strip()) > MIN_OWN_CHARS]  # fmt: skip
     sources = [leaf.text[:MAX_SOURCE_CHARS] for leaf, _ in leaves]
     all_notes = parallel(lambda i: take_notes(leaves[i][0].title, sources[i], llm, rounds), range(len(leaves)))  # fmt: skip
     parts: list[str] = []

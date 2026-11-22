@@ -86,7 +86,86 @@
     "facts": [
       "The predictor takes the context encoder's output plus one mask token per patch to be predicted.",
       "Each mask token is one shared learnable vector with a positional embedding added.",
-      "The predictor is run once per target block, so four times."
+      "The predictor is run once per target block."
+    ]
+  },
+  {
+    "tree": "evals/trees/2510.27688v1.outline.json",
+    "node": "Likelihood-Free Estimation of the Brier Score",
+    "facts": [
+      "Computing the Brier score directly needs the full predictive distribution, which CALM cannot provide.",
+      "The sum of squared probabilities is the chance that two independent samples are identical (a collision).",
+      "That term is estimated by drawing two samples and checking whether they are equal.",
+      "The probability of the true outcome is estimated by checking whether a single sample equals it.",
+      "The estimate is: first sample equals the truth, plus second sample equals the truth, minus the two samples equal each other.",
+      "The estimator is unbiased."
+    ]
+  },
+  {
+    "tree": "evals/trees/2510.27688v1.outline.json",
+    "node": "Brier-n: Extending to n-grams",
+    "facts": [
+      "Scoring only the first token of each decoded chunk would ignore the quality of the chunk's other tokens.",
+      "Brier-n treats a whole n-gram as a single outcome when checking for matches.",
+      "BrierLM is the geometric mean of the Brier-1 to Brier-4 scores.",
+      "The geometric mean is multiplied by one hundred, giving a score from zero to one hundred."
+    ]
+  },
+  {
+    "tree": "evals/trees/2510.27688v1.outline.json",
+    "node": "Algorithm: Likelihood-Free Temperature Sampling",
+    "facts": [
+      "The integer n is the whole-number part of one over the temperature, and the remainder is one over the temperature minus n.",
+      "First, n samples are drawn; unless they are all identical, the process restarts.",
+      "If the remainder is zero, the agreed sample is returned.",
+      "Otherwise samples are drawn one at a time, and a sample equal to the candidate returns the candidate.",
+      "On a mismatch, a uniform random number is drawn: below the remainder divided by the step count, the whole process restarts; otherwise the step count goes up by one and drawing continues."
+    ]
+  },
+  {
+    "tree": "evals/trees/2510.27688v1.outline.json",
+    "node": "Architecture of the Generative Head",
+    "facts": [
+      "The head refines a noise vector through a stack of residual MLP blocks.",
+      "Each block fuses the current representation with the Transformer's hidden state through two linear layers.",
+      "Each block then applies a SwiGLU layer whose intermediate size is the Transformer's hidden size.",
+      "A residual connection adds each block's input to its output.",
+      "A final linear layer projects the result to the size of the latent vector."
+    ]
+  },
+  {
+    "tree": "evals/trees/2510.27688v1.outline.json",
+    "node": "2.1 HIGH-FIDELITY RECONSTRUCTION",
+    "facts": [
+      "The autoencoder is context-free: each chunk is encoded independently of the rest of the sequence.",
+      "The encoder embeds the K tokens and passes each embedding through a position-wise feed-forward network.",
+      "The K hidden states are flattened and compressed by a linear layer to a single hidden-sized vector.",
+      "A second feed-forward network and a linear projection then give the latent vector.",
+      "The decoder mirrors the encoder and projects to vocabulary logits with the tied input embedding matrix.",
+      "Tokens are recovered by taking the most likely token (argmax) at each position.",
+      "The autoencoder is trained with cross-entropy summed over the K token positions.",
+      "With four tokens per chunk, a latent vector of only ten dimensions already reconstructs them with high fidelity."
+    ]
+  },
+  {
+    "tree": "evals/trees/2510.27688v1.outline.json",
+    "node": "5.3 BATCH APPROXIMATION",
+    "facts": [
+      "It targets low temperatures of the form one over n, where drawing n identical samples rarely succeeds.",
+      "It draws one large batch of N samples, with N much larger than n, and searches it for matching groups of n.",
+      "Each distinct sample's weight is the number of ways to choose n copies from how often it appears in the batch.",
+      "The output is drawn from the candidates in proportion to those weights.",
+      "If no sample appears n times, the requirement is lowered to n minus one, then n minus two, and so on, until there is a candidate."
+    ]
+  },
+  {
+    "tree": "evals/trees/2301.08243v3.outline.json",
+    "node": "Loss",
+    "facts": [
+      "For each target block, the squared distance between predicted and target representations is summed over the block's patches.",
+      "These sums are averaged over the target blocks.",
+      "The predictor and the context encoder are trained by gradient-based optimisation.",
+      "The target encoder is not trained by gradients: its weights are an exponential moving average of the context encoder's."
     ]
   }
 ]

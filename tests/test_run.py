@@ -883,3 +883,22 @@ def test_calls_in_flight_are_capped_however_parallel_nests(llm, tmp_path, monkey
     (tmp_path / "cases.json").write_text(json.dumps(cases))
     cli("eval", tmp_path / "cases.json", "--out", tmp_path)
     assert 1 <= most[0] <= 2 and len(llm) > 20
+
+
+def test_a_parents_own_text_is_narrated_before_its_children(llm, tmp_path):
+    """Text a section has before its first subsection is narrated too, as the first part, unless it is only a
+    heading or a line."""
+    long_intro = "The batch method draws many samples at once and counts repeats. " * 8
+    tree = [{"title": "5.3 Batch", "text": long_intro, "children": [
+        {"title": "Algorithm", "text": "The algorithm counts.", "children": []},
+        {"title": "Theorem", "text": "The bias vanishes.", "children": []}]}]  # fmt: skip
+    (tmp_path / "x.outline.json").write_text(json.dumps(tree))
+    cli("write", tmp_path / "x.outline.json", "--node", "5.3", "--out", tmp_path)
+    assert [source_of(c) for c in llm.of("leaf notes")] == [long_intro, "The algorithm counts.", "The bias vanishes."]  # fmt: skip
+    llm.clear()
+    cli("write", tmp_path / "x.outline.json", "--node", "Batch", "--out", tmp_path)
+    tree[0]["text"] = "## 5.3 Batch\n"
+    (tmp_path / "x.outline.json").write_text(json.dumps(tree))
+    llm.clear()
+    cli("write", tmp_path / "x.outline.json", "--node", "5.3", "--out", tmp_path)
+    assert len(llm.of("leaf notes")) == 2  # a bare heading is not narrated
