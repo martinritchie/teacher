@@ -6,6 +6,17 @@ Converts ML/AI papers into an audio only format, like a podcast.
 
 I am a busy parent, this helps me keep on top of reading: doing the dishes, driving and that sort of thing. No replacement for reading but better than no reading.
 
+## Example episodes
+
+Two episodes made entirely on one local GPU with the default settings (`uv run teacher run <pdf>`): no API calls. Each is the abstract read for the ear, the contributions in plain English, then how the method works.
+
+| Paper | Listen | Script |
+|---|---|---|
+| [Continuous Autoregressive Language Models (CALM)](https://arxiv.org/abs/2510.27688) | [MP3, 14 min](episodes/calm-2510.27688.mp3) | [script](episodes/calm-2510.27688.md) |
+| [Self-Supervised Learning from Images with a Joint-Embedding Predictive Architecture (I-JEPA)](https://arxiv.org/abs/2301.08243) | [MP3, 12 min](episodes/i-jepa-2301.08243.mp3) | [script](episodes/i-jepa-2301.08243.md) |
+
+GitHub can't play audio inside a README: the MP3 link opens the file page, where "View raw" plays it in the browser or downloads it. PDFs and MP3s are stored with [Git LFS](https://git-lfs.com), so run `git lfs install` before cloning to get the files rather than pointers.
+
 ## How it works
 
 Everything runs locally on one NVIDIA GPU (developed on an RTX 5070 Ti, 16 GB), with one model on the GPU at a time.

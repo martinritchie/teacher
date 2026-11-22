@@ -33,6 +33,8 @@ papers
 # Outputs: scripts, audio, traces, logs, eval reports (see README, "Outputs")
 out/
 *.mp3
+# ...except published episodes, stored with Git LFS
+!episodes/*.mp3
 
 # graphify knowledge graph
 graphify-out/

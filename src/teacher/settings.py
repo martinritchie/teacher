@@ -15,7 +15,7 @@ WORDS_PER_MINUTE = 150
 SAMPLE_RATE = 24000
 PAUSE_SECONDS = 0.6  # silence between paragraphs
 
-PARALLEL = 4  # model calls in flight at once, across all threads; vLLM batches them (continuous batching)
+PARALLEL = 16  # threads per parallel() call; each model's `parallel` profile setting caps its calls in flight
 
 JUDGE_MODEL = "claude-sonnet-5-5"  # `teacher eval`'s judge: fixed, so scores stay comparable as the writer changes
 CLAUDE_KEY = (
@@ -23,13 +23,15 @@ CLAUDE_KEY = (
 )
 
 # Each served model family's settings, matched by the start of its name. `writing` and `thinking` are the model
-# settings of agents that write and of agents that plan or check; `server` is the extra `vllm serve` flags.
+# settings of agents that write and of agents that plan or check; `server` is the extra `vllm serve` flags;
+# `parallel` caps its calls in flight across all threads (vLLM batches them; the API takes more).
 PROFILES = {
     # Qwen3's recommended sampling for each mode. Reply caps keep prompt + reply inside CONTEXT: a thinking call
     # can otherwise think until the window is full and return no answer. The KV cache is a fixed 3.5 GiB, about
     # 23k tokens of Qwen3-14B, next to 9.4 GiB of weights on a 16 GB card (4.5 GiB runs out of memory); vLLM's
     # own estimate collapses on a fresh compile.
     "Qwen/Qwen3-": {
+        "parallel": 6,
         "server": [
             *"--kv-cache-memory-bytes 3758096384 --max-num-seqs 8 --max-num-batched-tokens 2048".split(),
             *["--max-model-len", str(CONTEXT), "--reasoning-parser", "qwen3"],
@@ -56,6 +58,7 @@ PROFILES = {
     # Claude on the Anthropic API: thinking is always adaptive and effort sets its depth; no sampling settings.
     # A refused request is re-run on a fallback model in the same call (server-side fallback).
     "claude-": {
+        "parallel": 16,
         "server": None,
         "writing": {
             "max_tokens": 16000,

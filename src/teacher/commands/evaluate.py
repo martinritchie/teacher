@@ -33,6 +33,10 @@ def evaluate(
         NOTE_ROUNDS,
         help="Verify-and-revise rounds for each leaf's notes; 0 for one draft",
     ),
+    repeat: int = typer.Option(
+        1,
+        help="Runs of every case, all at once; the table shows each run's score and the mean",
+    ),
     out: Path = typer.Option(
         Path("out/eval"), help="Output directory; each run gets a timestamped report"
     ),
@@ -45,31 +49,44 @@ def evaluate(
         if not only or only.lower() in c["node"].lower()
     ]
     out.mkdir(parents=True, exist_ok=True)
-    stamp = time.strftime("%Y%m%d-%H%M%S")
+    stamp, began = time.strftime("%Y%m%d-%H%M%S"), time.monotonic()
     judge_llm = claude(
         JUDGE_MODEL
     )  # first, so a missing key stops the run before any narration
     with serve_script_model(model, out / "script-model.log", server) as llm:
         start_trace(out / f"{stamp}.trace.jsonl")
-        results = parallel(
-            lambda case: _run_case(case, llm, judge_llm, note_rounds), todo
+        runs = parallel(
+            lambda case: _run_case(case, llm, judge_llm, note_rounds), todo * repeat
         )
-    table = [f"{'node':40} stated  missing  contra  unverified  symbols  words"]
-    for case, (narration, judged) in zip(todo, results):
-        n = {
-            v: sum(j[0] == v for j in judged)
-            for v in ("stated", "missing", "contradicted")
-        }
-        table.append(f"{case['node'][:40]:40} {n['stated']:>3}/{len(judged):<3} {n['missing']:>6} {n['contradicted']:>7} {sum(bool(j[2]) for j in judged):>11} {len(_symbols(narration)):>8} {len(narration.split()):>6}")  # fmt: skip
-    total = (
-        sum(j[0] == "stated" for _, judged in results for j in judged),
-        sum(len(c["facts"]) for c in todo),
-    )
-    table.append(f"{'total':40} {total[0]:>3}/{total[1]}")
-    table.insert(0, f"narrated by {model}, judged by {JUDGE_MODEL}")
+    by_case = [
+        runs[i :: len(todo)] for i in range(len(todo))
+    ]  # each case's runs, in order
+    table = [
+        f"narrated by {model}, judged by {JUDGE_MODEL}, {repeat} run(s) in {time.monotonic() - began:.0f}s"
+    ]
+    table.append(f"{'node':40} stated  missing  contra  unverified  symbols  words")
+    for case, results in zip(todo, by_case):
+        verdicts = [j for _, judged in results for j in judged]
+        count = lambda v: sum(j[0] == v for j in verdicts)  # noqa: E731
+        stated = " ".join(
+            f"{sum(j[0] == 'stated' for j in judged)}/{len(judged)}"
+            for _, judged in results
+        )
+        words = sum(len(narration.split()) for narration, _ in results) // repeat
+        symbols = sum(len(_symbols(narration)) for narration, _ in results)
+        table.append(f"{case['node'][:40]:40} {stated:>7} {count('missing'):>6} {count('contradicted'):>7} {sum(bool(j[2]) for j in verdicts):>11} {symbols:>8} {words:>6}")  # fmt: skip
+    totals = [
+        sum(sum(j[0] == "stated" for j in by_case[c][r][1]) for c in range(len(todo)))
+        for r in range(repeat)
+    ]
+    of = sum(len(c["facts"]) for c in todo)
+    mean = f"  mean {sum(totals) / repeat:.1f}" if repeat > 1 else ""
+    table.append(f"{'total':40} {' '.join(f'{t}/{of}' for t in totals):>7}{mean}")
     report = ["```", *table, "```"]
-    for case, (narration, judged) in zip(todo, results):
-        report += [f"## {case['node']}", narration, *(f"- **{v}**: {fact} — _{quote}_{' **(' + flag + ')**' if flag else ''}" for fact, (v, quote, flag) in zip(case["facts"], judged)), f"Symbols: {', '.join(_symbols(narration)) or 'none'}"]  # fmt: skip
+    for case, results in zip(todo, by_case):
+        for r, (narration, judged) in enumerate(results, start=1):
+            run = f" (run {r})" if repeat > 1 else ""
+            report += [f"## {case['node']}{run}", narration, *(f"- **{v}**: {fact} — _{quote}_{' **(' + flag + ')**' if flag else ''}" for fact, (v, quote, flag) in zip(case["facts"], judged)), f"Symbols: {', '.join(_symbols(narration)) or 'none'}"]  # fmt: skip
     (out / f"{stamp}.md").write_text("\n\n".join(report) + "\n")
     typer.echo("\n".join(table) + f"\n\nDetails in {out / stamp}.md")
 

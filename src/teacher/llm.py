@@ -8,6 +8,7 @@ come from the profile of whichever model runs it (settings.PROFILES): writing or
 import asyncio
 import json
 import threading
+import time
 from collections.abc import Callable, Iterable
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -35,9 +36,8 @@ _trace_lock = threading.Lock()
 _thinks: dict[
     str, bool
 ] = {}  # agent name -> whether it plans or checks (thinking settings)
-_slots = threading.BoundedSemaphore(
-    PARALLEL
-)  # model calls in flight, however deeply `parallel` nests
+# Calls in flight per model, however deeply `parallel` nests: the GPU's cap does not hold back API calls.
+_slots: dict[str, threading.BoundedSemaphore] = {}
 
 # Every model call runs on this one event loop, whichever thread asks: the HTTP client's connection
 # pool belongs to the loop that first used it, so calls from `parallel` threads must not bring their own.
@@ -55,9 +55,14 @@ def ask(agent: Agent, llm: Model, fallback=None, **values):
     """One call, traced. With a `fallback`, a reply that is not valid output (e.g. thinking that ran out of
     tokens) gives the fallback instead of ending the run."""
     prompt, error = _render(f"{agent.name}_task.md", **values), None
-    settings = profile(llm.model_name)["thinking" if _thinks[agent.name] else "writing"]
+    family = profile(llm.model_name)
+    settings = family["thinking" if _thinks[agent.name] else "writing"]
+    slots = _slots.setdefault(
+        llm.model_name, threading.BoundedSemaphore(family["parallel"])
+    )
     try:
-        with _slots:
+        with slots:
+            start = time.monotonic()
             call = agent.run(prompt, model=llm, model_settings=settings)
             output = asyncio.run_coroutine_threadsafe(call, _loop).result().output
     except UnexpectedModelBehavior as e:
@@ -65,7 +70,8 @@ def ask(agent: Agent, llm: Model, fallback=None, **values):
             raise
         output, error = fallback, str(e)
     saved = output.model_dump() if isinstance(output, BaseModel) else output
-    line = {"call": agent.name, "prompt": prompt, "output": saved}
+    seconds = round(time.monotonic() - start, 1)
+    line = {"call": agent.name, "model": llm.model_name, "seconds": seconds, "prompt": prompt, "output": saved}  # fmt: skip
     with _trace_lock, _trace.open("a") as f:
         f.write(json.dumps(line | ({"error": error} if error else {})) + "\n")
     return output
@@ -84,7 +90,7 @@ def ask_until(
 
 
 def parallel(fn: Callable, items: Iterable) -> list:
-    """`fn` over `items`, up to PARALLEL calls at a time, so vLLM can batch them; results in order."""
+    """`fn` over `items` on up to PARALLEL threads, results in order. Calls in flight are capped per model in `ask`."""
     with ThreadPoolExecutor(PARALLEL) as pool:
         return list(pool.map(fn, items))
 

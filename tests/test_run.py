@@ -859,9 +859,9 @@ def test_a_model_with_no_profile_is_an_error():
 
 
 def test_calls_in_flight_are_capped_however_parallel_nests(llm, tmp_path, monkeypatch):
-    """Every model call holds one of PARALLEL slots, so nested `parallel` calls (cases, then notes, then facts) cannot
-    exceed it; and nesting cannot deadlock."""
-    held, most = [0], [0]
+    """Every call holds one of its model's slots, so nested `parallel` calls (cases, then notes, then facts) cannot
+    exceed the cap; and nesting cannot deadlock."""
+    held, most = [0], [0]  # for the narrating model's slots
 
     class Slots:
         def __init__(self):
@@ -877,7 +877,7 @@ def test_calls_in_flight_are_capped_however_parallel_nests(llm, tmp_path, monkey
             self.inner.release()
 
     monkeypatch.setattr(llm_mod, "PARALLEL", 4)
-    monkeypatch.setattr(llm_mod, "_slots", Slots())
+    monkeypatch.setattr(llm_mod, "_slots", {SMALL_MODEL: Slots()})
     (tmp_path / "x.outline.json").write_text(json.dumps(TREE))
     cases = [{"tree": str(tmp_path / "x.outline.json"), "node": n, "facts": ["A.", "B."]} for n in ("Method", "Loss", "Encoder")]  # fmt: skip
     (tmp_path / "cases.json").write_text(json.dumps(cases))
@@ -902,3 +902,27 @@ def test_a_parents_own_text_is_narrated_before_its_children(llm, tmp_path):
     llm.clear()
     cli("write", tmp_path / "x.outline.json", "--node", "5.3", "--out", tmp_path)
     assert len(llm.of("leaf notes")) == 2  # a bare heading is not narrated
+
+
+def test_repeat_runs_every_case_several_times_at_once(llm, tmp_path):
+    """--repeat N narrates and judges every case N times in one go; the table shows each run's score and the mean."""
+    (tmp_path / "x.outline.json").write_text(json.dumps(TREE))
+    cases = [{"tree": str(tmp_path / "x.outline.json"), "node": n, "facts": ["A.", "B."]} for n in ("Encoder", "Loss")]  # fmt: skip
+    (tmp_path / "cases.json").write_text(json.dumps(cases))
+    output = cli("eval", tmp_path / "cases.json", "--out", tmp_path, "--repeat", 3)
+    assert len(llm.of("judge")) == 2 * 2 * 3
+    assert re.search(r"Encoder +2/2 2/2 2/2", output) and re.search(
+        r"total +4/4 4/4 4/4  mean 4.0", output
+    )
+    assert (
+        "3 run(s)" in output
+        and "## Loss (run 3)" in next(tmp_path.glob("*.md")).read_text()
+    )
+
+
+def test_the_trace_records_each_calls_model_and_time(llm, tmp_path):
+    """Each trace line names the model and how long the call took, to see where a run's time goes."""
+    (tmp_path / "x.outline.json").write_text(json.dumps(TREE))
+    cli("write", tmp_path / "x.outline.json", "--node", "Encoder", "--out", tmp_path)
+    line = json.loads((tmp_path / "x.encoder.trace.jsonl").read_text().splitlines()[0])
+    assert line["model"] == SMALL_MODEL and isinstance(line["seconds"], float)
