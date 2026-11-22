@@ -1,0 +1,92 @@
+[
+  {
+    "tree": "evals/trees/2510.27688v1.outline.json",
+    "node": "3.3.2 ENERGY LOSS",
+    "facts": [
+      "At each step, several candidate vectors (eight) are drawn from the generative head.",
+      "The targets are many vectors (one hundred) sampled from the autoencoder's Gaussian posterior for the true chunk, not a single target vector.",
+      "In the energy loss, the term comparing every model sample with every target sample is weighted by two.",
+      "In the energy loss, the term comparing every pair of different model samples is subtracted.",
+      "The distances are plain distances, not squared distances.",
+      "The loss is summed over the steps of the sequence."
+    ]
+  },
+  {
+    "tree": "evals/trees/2510.27688v1.outline.json",
+    "node": "Discrete Token Input",
+    "facts": [
+      "Feeding the previous latent vector to the Transformer was tried and hurt performance.",
+      "The Transformer's input at each step is built from the previous chunk of K tokens, not from the previous latent vector.",
+      "A small two-layer MLP compresses the K token embeddings into a single input vector.",
+      "At inference, each predicted vector is decoded by the frozen autoencoder decoder into K tokens, which become the next step's input."
+    ]
+  },
+  {
+    "tree": "evals/trees/2510.27688v1.outline.json",
+    "node": "Variational Regularization",
+    "facts": [
+      "The encoder outputs the mean and standard deviation of a diagonal Gaussian, and the latent vector is sampled from it.",
+      "A KL divergence term pulls that Gaussian towards a standard normal prior.",
+      "The total loss is the reconstruction loss plus the KL term weighted by a small constant (zero point zero zero one).",
+      "The purpose is a smoother latent space, discouraging precise or large-magnitude latent values."
+    ]
+  },
+  {
+    "tree": "evals/trees/2510.27688v1.outline.json",
+    "node": "Preventing Posterior Collapse",
+    "facts": [
+      "Some latent dimensions collapse to the standard normal prior and carry no information.",
+      "Collapsed dimensions inject noise that destabilises training of the downstream language model.",
+      "Each dimension's KL term is replaced by the larger of itself and a fixed floor, so pushing it below the floor gives no reward.",
+      "The floor is zero point five."
+    ]
+  },
+  {
+    "tree": "evals/trees/2510.27688v1.outline.json",
+    "node": "Dropout for Enhanced Robustness",
+    "facts": [
+      "Dropout with a rate of fifteen percent is applied to the latent vector before the decoder.",
+      "Fifteen percent of the input tokens are masked, so the encoder must infer them from context.",
+      "Both kinds of dropout are used only while training the autoencoder, not while training or running the language model.",
+      "With these choices, four tokens map to a latent vector of one hundred and twenty eight dimensions."
+    ]
+  },
+  {
+    "tree": "evals/trees/2510.27688v1.outline.json",
+    "node": "5.1 EXACT TEMPERATURE SAMPLING",
+    "facts": [
+      "For a temperature of one over an integer n, draw n samples and accept only if all n are identical; otherwise restart.",
+      "A general temperature is handled by splitting one over the temperature into an integer part and a fractional remainder.",
+      "The fractional part is handled by a Bernoulli factory procedure that simulates a coin whose success probability is the sample's probability raised to the remainder.",
+      "Failing at any stage restarts the whole process."
+    ]
+  },
+  {
+    "tree": "evals/trees/2301.08243v3.outline.json",
+    "node": "Targets",
+    "facts": [
+      "The whole image, as non-overlapping patches, goes through the target encoder.",
+      "The target blocks are taken from the target encoder's output, not from its input.",
+      "Four target blocks are sampled, each with a scale between fifteen and twenty percent and an aspect ratio between three quarters and one and a half.",
+      "Target blocks may overlap each other."
+    ]
+  },
+  {
+    "tree": "evals/trees/2301.08243v3.outline.json",
+    "node": "Context",
+    "facts": [
+      "One context block is sampled with a scale between eighty five and one hundred percent and a square aspect ratio.",
+      "Any region of the context block that overlaps a target block is removed.",
+      "Only the remaining context patches are fed through the context encoder."
+    ]
+  },
+  {
+    "tree": "evals/trees/2301.08243v3.outline.json",
+    "node": "Prediction",
+    "facts": [
+      "The predictor takes the context encoder's output plus one mask token per patch to be predicted.",
+      "Each mask token is one shared learnable vector with a positional embedding added.",
+      "The predictor is run once per target block, so four times."
+    ]
+  }
+]

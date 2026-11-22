@@ -1,0 +1,1 @@
+Write in plain words: no symbols, LaTeX, subscripts, Greek letters, brackets or digits, and numbers in words. An equation becomes the operations it performs. Describe shapes in words ("one vector per image patch"), never as "[B, N, D]".

@@ -1,4 +1,4 @@
-# Teacher 
+# Teacher
 
 Converts ML/AI papers into an audio only format, like a podcast.
 
@@ -6,22 +6,135 @@ Converts ML/AI papers into an audio only format, like a podcast.
 
 I am a busy parent, this helps me keep on top of reading: doing the dishes, driving and that sort of thing. No replacement for reading but better than no reading.
 
+## How it works
+
+Everything runs locally on one NVIDIA GPU (developed on an RTX 5070 Ti, 16 GB), with one model on the GPU at a time.
+
+1. **Read**: a PDF goes through [MinerU](https://github.com/opendatalab/MinerU). It finds the page layout, then its `MinerU2.5-Pro` 1.2B vision model, on an in-process [vLLM](https://github.com/vllm-project/vllm) engine, reads each region. The result is Markdown with LaTeX equations, HTML tables and algorithm boxes; figures are dropped but their captions kept. Blog posts go through [trafilatura](https://github.com/adbar/trafilatura). Everything from the references on is cut (which, for now, includes any appendix).
+2. **Write**: a `vllm serve` subprocess runs the script model (Qwen3-14B-AWQ), and [Pydantic AI](https://ai.pydantic.dev) agents write the script. Each agent is one fixed system prompt and a typed output, used for single-turn calls; plain Python decides what to call next. Independent calls run in parallel (`PARALLEL` in `settings.py`) so vLLM can batch them. The episode has three parts, each given everything the listener has already heard, so it builds on it instead of repeating it:
+   - **Abstract**: the text under the abstract heading, transcribed for the ear: symbols, numbers and acronyms in spoken form, nothing else changed. A transcription that keeps under 80% of the original words, or keeps symbols, is made again.
+   - **Contributions**: from the abstract, introduction and conclusion, each contribution in plain English (the problem, what was done before, what is new), for a listener who knows ML but not the subfield.
+   - **How it works**, so that the listener could implement it. The source is split at its headings into sections ([semchunk](https://github.com/isaacus-dev/semchunk) splits any over `--chunk` tokens); a note-taker summarises each, and a planner (thinking on) outlines the method as a glossary of plain names and two to seven components, each naming the sections it draws on. For each component, a detailer (thinking on) rewrites its inputs, steps and outputs from the full text of those sections, and one part is written from it. Each part is checked by a round trip: a listener agent writes pseudocode from the narration alone, and a checker (thinking on) compares it with the component and the source; any word with a digit or symbol in it is also a problem, found by a regex. A part with problems is rewritten once.
+3. **Speak**: [Qwen3-TTS](https://huggingface.co/Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice) (1.7B, Apache-2.0) on a [vLLM-Omni](https://github.com/vllm-project/vllm-omni) server reads the script, a batch of paragraphs per request, in a style set by `prompts/voice.md`.
+
+### The outline tree (in progress)
+
+`teacher run` plans the method from short notes, which loses things. Its replacement, not yet wired into `run`, breaks the source down the way you would by hand:
+
+1. **Top level**: the source's own top-level sections, found from heading numbers in code.
+2. **Recursion**: for each section, a splitter (thinking on) reads its text and lists its subsections, each as a title and the exact words it starts with, or none if it is one idea. It writes nothing else. Code cuts the text at those words, and each piece is broken down in turn, until it is one idea, under 1,500 characters, or four levels deep.
+3. **Narration** of a node, leaf by leaf: a note-taker writes one fact per item from the leaf's text, and a separate verifier (thinking on) lists what the notes miss or get wrong against the text; the note-taker revises until the verifier finds nothing, or for at most three rounds. A part is then written from the notes, listened to and checked as above.
+
+`teacher outline` builds the tree, `teacher write` narrates one node of it, and `teacher eval` scores narrations against facts (see [Iterating on prompts](#iterating-on-prompts)).
+
+## Code
+
+[`commands/run.py`](src/teacher/commands/run.py) is the place to start: it reads as the data flow, one line per stage. Each command is one thin file in `commands/`, registered in [`cli.py`](src/teacher/cli.py); the work is in the modules below it, which import only each other's public names.
+
+| Module | Does |
+|---|---|
+| `commands/` | `run`, `outline`, `write`, `eval` (`evaluate.py`) and `serve`: options, files in and out, nothing else |
+| `source.py` | Fetch a path or URL, convert a PDF (MinerU), HTML (trafilatura) or Markdown file, cut the references |
+| `episode.py` | The `run` script: chunking, abstract, contributions, then notes → planner → detailer → a checked part per component |
+| `tree.py` | The outline tree: top-level sections, recursive splitting, the notes loop, narrating a node |
+| `part.py` | One checked spoken part, shared by both: writer → listener → checker → one rewrite; the `Brief` it is written from |
+| `judge.py` | The fact judge for `eval`, and the check that its quote is in the narration |
+| `llm.py` | Talking to the model: `agent(name)`, `ask` (one traced call), `ask_until` (ask, check, ask again with the problems), `parallel` |
+| `speech.py` | Strip markup into paragraphs, synthesise them, write `.md` and `.mp3`; the check for words TTS reads badly |
+| `servers.py` | Start a vLLM or vLLM-Omni server for the length of a `with` block, or use a running one |
+| `settings.py` | Models, limits, server flags, sampling, parallelism, environment |
+
+## Prompts
+
+Everything the models see is in `src/teacher/prompts/`, as [Jinja2](https://jinja.palletsprojects.com) templates, one folder per stage. An agent named `part/writer` has `part/writer.md` as its instructions, starting with a `# Title` line, and `part/writer_task.md` as the message of each call, built from tagged blocks such as `<source>`, `<heard>`, `<draft>` and `<problems>`. Blocks used by more than one prompt are in `_shared/` and pulled in with `{% include %}`: the spoken-output rules (`spoken.md`), the plain-words rule for notes and plans (`plain.md`), the problems from a check (`problems.md`), and the component and outline blocks.
+
+| Folder | Agents | Used by |
+|---|---|---|
+| `episode/` | `abstract` reader, `contributions` writer | `run` |
+| `plan/` | `section_notes`, `planner`, `detailer` | `run` |
+| `tree/` | `splitter`, `note_taker`, `notes_verifier` | `outline`, `write`, `eval` |
+| `part/` | `writer`, `listener`, `checker` | `run`, `write`, `eval` |
+| `eval/` | `judge` | `eval` |
+| `voice.md` | the narrator's voice, for TTS | `run` |
+
 ## Usage
 
-Install [Ollama](https://ollama.com), pull a model, and install espeak-ng for Kokoro:
+```bash
+uv run teacher run https://arxiv.org/abs/2510.27688 --minutes 20   # script and MP3
+uv run teacher run paper.pdf --no-audio                             # script only
+```
+
+`teacher run` takes a PDF path, PDF URL, arXiv abs URL or blog post URL.
+
+| Option | Default | |
+|---|---|---|
+| `--model` | `Qwen/Qwen3-14B-AWQ` | Hugging Face model that vLLM serves for the script. The server flags in `settings.py` assume a Qwen3 model |
+| `--voice` | `ryan` | Qwen3-TTS speaker; `aiden` is the other native English voice |
+| `--minutes` | `25` | Upper limit on the length of the audio. Each method part's word target comes from the outline (capped at 300 words) and only shrinks if the total does not fit |
+| `--chunk` | `4000` | Max source tokens per section; longer sections are split. Lower it if vLLM rejects a call as too long |
+| `--no-audio` | off | Stop after the script |
+| `--server` | none | URL of a running `teacher serve`; skips starting vLLM |
+| `--out` | `out/run` | Output directory |
+
+`teacher run` sets these environment variables unless you set them yourself:
+
+| Variable | Value | Why |
+|---|---|---|
+| `VLLM_USE_FLASHINFER_SAMPLER` | `0` | FlashInfer compiles with the system `nvcc`, and Blackwell GPUs need CUDA ≥ 12.9 |
+| `MINERU_PROCESSING_WINDOW_SIZE` | `8` | Pages held in RAM at once |
+| `TORCHINDUCTOR_COMPILE_THREADS` | `1` | Keeps the vLLM compile step's RAM down |
+| `MINERU_TELEMETRY_DISABLED` | `1` | MinerU sends usage telemetry by default |
+
+## Outputs
+
+Everything a command writes goes under `out/`, which git ignores:
+
+| Path | Written by | Contents |
+|---|---|---|
+| `out/run/<name>.md`, `.mp3` | `run` | The script and the audio |
+| `out/<command>/<name>.trace.jsonl` | every command | Every model call, one JSON line each: the agent (such as `part/writer`), the message, the reply, and any error. The first place to look when a part comes out wrong |
+| `out/outline/<name>.outline.md`, `.json` | `outline` | The nested headings; the tree with each node's text |
+| `out/write/<name>.<node>.md` | `write` | The narration of one node |
+| `out/eval/<time>.md` | `eval` | The score table, each narration, and each fact's verdict with the judge's quote |
+| `out/<command>/script-model.log`, `voice-model.log`, `out/serve.log` | servers | vLLM logs |
+
+## Setup
+
+Requires Linux, an NVIDIA GPU, and about 8 GB of free RAM.
 
 ```bash
-ollama pull gemma3:12b
-sudo apt install espeak-ng  # Ubuntu
 uv sync
 ```
 
-One command turns a PDF path, PDF URL, arXiv abs URL or blog post URL into `<out>/<name>.md` (the script) and `<out>/<name>.mp3`:
+Model weights download on first use: MinerU's to `~/.mineru`, the others to `~/.cache/huggingface`. Each vLLM engine compiles on its first start, which takes a few minutes; later starts take about 30 s to 2 min. Server logs are written next to each command's outputs (see [Outputs](#outputs)).
+
+## Iterating on prompts
+
+A full `teacher run` takes a quarter of an hour or more. To change a prompt and see the effect in minutes:
 
 ```bash
-uv run teacher run https://arxiv.org/abs/2510.27688 --minutes 20
+uv run teacher serve                     # once, in its own terminal: keeps the script model on the GPU
+uv run teacher eval --server http://127.0.0.1:8000                    # every case, about 3 minutes
+uv run teacher eval --server http://127.0.0.1:8000 --only "energy"    # one case, about a minute
+uv run teacher write evals/trees/2510.27688v1.outline.json --node "3.3.2" --server http://127.0.0.1:8000
+uv run teacher outline paper.pdf --server http://127.0.0.1:8000       # a new tree; also takes a .md file
 ```
 
-Options: `--model` (Ollama tag, default `gemma3:12b`), `--voice` (Kokoro voice, default `af_heart`), `--minutes` (default 25), `--chunk` (max source tokens per call, default 4000; lower it if the run stops with a cut prompt), `--out` (default `out`).
+`evals/cases.json` lists nodes of two papers, each with three to six facts its narration must state; `evals/trees/` holds the outline trees they come from, kept fixed so runs are comparable. `teacher eval` narrates each node, and a judge checks one fact per call: `stated`, `missing` or `contradicted`, with a quote from the narration that code checks is really there. A verdict whose quote is not in the narration counts as missing. The score varies from run to run, because each run writes new narrations, so judge a prompt change by a clear shift in the total, not by single facts. `--note-rounds 0` turns off the notes verifier, to measure what it adds.
 
-## Development Plan
+## Development
+
+```bash
+uv run pytest -m "not slow"  # script model (a pydantic-ai FunctionModel) and TTS stubbed; real MinerU runs once per session
+make test                    # also the slow test, which runs real Qwen3-TTS
+make check                   # ruff format and lint
+```
+
+The tests that convert the CALM paper load MinerU on the GPU, so stop `teacher serve` first (`pkill -f "teacher serve"`); the others need no GPU.
+
+## Development plan
+
+- Wire the outline tree into `teacher run`: choose the method's branches, narrate their leaves in order, and give each parent a short spoken signpost of its parts.
+- Keep the appendix: cut only the reference list, so implementation details (such as I-JEPA's Appendix A) reach the outline.
+- A steadier eval: run each case several times, and take a majority of three judge verdicts per fact.
+- Narration fixes the eval points at: symbols spelled out as words ("mu", "g phi"), and estimator details (weights, signs, sums) that the notes verifier lets through.

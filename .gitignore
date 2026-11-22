@@ -25,3 +25,14 @@ wheels/
 Thumbs.db
 papers
 
+
+# Tool caches
+.pytest_cache/
+.ruff_cache/
+
+# Outputs: scripts, audio, traces, logs, eval reports (see README, "Outputs")
+out/
+*.mp3
+
+# graphify knowledge graph
+graphify-out/

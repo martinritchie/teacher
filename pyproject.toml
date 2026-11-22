@@ -5,16 +5,18 @@ build-backend = "hatchling.build"
 [project]
 name = "teacher"
 version = "0.1.0"
-description = "Multi-agent research paper to audio transcript system"
+description = "Turn ML papers into podcast-style audio with local models"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    "kokoro>=0.9.4",
-    "ollama>=0.6.3",
-    "pymupdf4llm>=2.1",
+    "jinja2>=3.1",
+    "mineru[full]>=4.2",
+    "pydantic-ai-slim[openai]>=2.31.1",
+    "semchunk>=4.1",
     "soundfile>=0.14.0",
     "trafilatura>=2.3.1",
     "typer>=0.20.0",
+    "vllm-omni==0.30.0",
 ]
 
 [project.scripts]
@@ -22,6 +24,7 @@ teacher = "teacher.cli:app"
 
 [tool.uv]
 package = true
+environments = ["sys_platform == 'linux'"]
 
 [dependency-groups]
 dev = [

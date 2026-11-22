@@ -1,7 +1,7 @@
 .PHONY: format lint fix check help install reinstall clean test
 
 help:
-	@echo "Teacher - Research paper to audio transcript system"
+	@echo "Teacher - ML papers to podcast-style audio, with local models"
 	@echo ""
 	@echo "Available commands:"
 	@echo "  make install     Install dependencies"

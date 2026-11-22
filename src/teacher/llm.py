@@ -1,0 +1,95 @@
+"""Talking to the script model: agents built from prompt files, traced calls, a retry loop, and parallel calls.
+
+An agent named "part/writer" has prompts/part/writer.md as its instructions and renders
+prompts/part/writer_task.md, with the values passed to `ask`, as the message of each call.
+"""
+
+import asyncio
+import json
+import threading
+from collections.abc import Callable, Iterable
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+
+import jinja2
+from pydantic import BaseModel, Field
+from pydantic_ai import Agent, NativeOutput
+from pydantic_ai.exceptions import UnexpectedModelBehavior
+from pydantic_ai.models import Model
+
+from teacher.settings import PARALLEL, PROMPTS, WRITING
+
+
+class Problems(BaseModel):
+    problems: list[str] = Field(
+        description="One concrete problem per item. Empty if there are none."
+    )
+
+
+_templates = jinja2.Environment(
+    loader=jinja2.FileSystemLoader(PROMPTS), undefined=jinja2.StrictUndefined
+)
+_trace: Path  # every call's prompt and output, one JSON line each
+_trace_lock = threading.Lock()
+
+# Every model call runs on this one event loop, whichever thread asks: the HTTP client's connection
+# pool belongs to the loop that first used it, so calls from `parallel` threads must not bring their own.
+_loop = asyncio.new_event_loop()
+threading.Thread(target=_loop.run_forever, daemon=True).start()
+
+
+def agent(name: str, output=str, settings=WRITING) -> Agent:
+    output = output if output is str else NativeOutput(output)
+    return Agent(
+        name=name,
+        instructions=_render(f"{name}.md"),
+        output_type=output,
+        model_settings=settings,
+    )
+
+
+def ask(agent: Agent, llm: Model, fallback=None, **values):
+    """One call, traced. With a `fallback`, a reply that is not valid output (e.g. thinking that ran out of
+    tokens) gives the fallback instead of ending the run."""
+    prompt, error = _render(f"{agent.name}_task.md", **values), None
+    try:
+        run = asyncio.run_coroutine_threadsafe(agent.run(prompt, model=llm), _loop)
+        output = run.result().output
+    except UnexpectedModelBehavior as e:
+        if fallback is None:
+            raise
+        output, error = fallback, str(e)
+    saved = output.model_dump() if isinstance(output, BaseModel) else output
+    line = {"call": agent.name, "prompt": prompt, "output": saved}
+    with _trace_lock, _trace.open("a") as f:
+        f.write(json.dumps(line | ({"error": error} if error else {})) + "\n")
+    return output
+
+
+def ask_until(
+    agent: Agent, llm: Model, check: Callable, tries: int = 2, **values
+) -> object:
+    """Ask, and while `check(output)` finds problems and tries are left, ask again with the last output
+    as `draft` and the problems as `problems`. The last try is not checked."""
+    output, problems = None, []
+    for attempt in range(tries):
+        output = ask(agent, llm, draft=output, problems=problems, **values)
+        if attempt == tries - 1 or not (problems := check(output)):
+            return output
+
+
+def parallel(fn: Callable, items: Iterable) -> list:
+    """`fn` over `items`, up to PARALLEL calls at a time, so vLLM can batch them; results in order."""
+    with ThreadPoolExecutor(PARALLEL) as pool:
+        return list(pool.map(fn, items))
+
+
+def start_trace(path: Path) -> None:
+    """Record every later model call's prompt and output in `path`, one JSON line each."""
+    global _trace
+    _trace = path
+    path.write_text("")
+
+
+def _render(template: str, **values) -> str:
+    return _templates.get_template(template).render(**values)
