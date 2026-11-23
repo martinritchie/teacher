@@ -18,11 +18,11 @@ def test_no_audio_writes_the_script_only(llm, tts, tmp_path):
     assert not tts and not (tmp_path / f"{PDF.stem}.mp3").exists()
 
 
-def test_pdf_in_script_and_audio_out(llm, tts, tmp_path):
+def test_pdf_in_script_and_audio_out(episode_run):
     """One command turns a local PDF into <name>.md and <name>.mp3."""
-    run(PDF, "--out", tmp_path)
-    assert (tmp_path / f"{PDF.stem}.mp3").exists()
-    assert (tmp_path / f"{PDF.stem}.md").read_text() == tts[0].script
+    tts, out = episode_run.tts, episode_run.out
+    assert (out / f"{PDF.stem}.mp3").exists()
+    assert (out / f"{PDF.stem}.md").read_text() == tts[0].script
 
 
 def test_rejected_call_is_an_error(llm, tts, tmp_path):

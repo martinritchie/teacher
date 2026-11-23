@@ -36,8 +36,8 @@ dev = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = ["--import-mode=importlib"]  # pytest's recommendation for new projects; test files need not have unique names
-markers = ["slow: loads real models"]
+addopts = ["--import-mode=importlib", "-m", "not functional"]  # importlib: pytest's recommendation for new projects. A later -m replaces this one.
+markers = ["functional: real models, GPU, network or processes; too slow for the unit tests, run by make test-functional"]
 
 [tool.coverage.run]
 source = ["teacher"]

@@ -13,14 +13,13 @@ from teacher.testing import (
     SMALL_MODEL,
     TREE,
     cli,
-    run,
 )
 
 
-def test_every_call_is_traced(llm, tts, tmp_path):
+def test_every_call_is_traced(episode_run):
     """<name>.trace.jsonl has one line per model call: the prompt template, the message sent and the reply."""
-    run(PDF, "--out", tmp_path)
-    trace = (tmp_path / f"{PDF.stem}.trace.jsonl").read_text().splitlines()
+    llm, out = episode_run.llm, episode_run.out
+    trace = (out / f"{PDF.stem}.trace.jsonl").read_text().splitlines()
     lines = [json.loads(line) for line in trace]
     assert [line["prompt"] for line in lines] == [c.prompt for c in llm]
     assert lines[0]["call"] == "episode/abstract" and "text" in lines[0]["output"]
@@ -55,10 +54,10 @@ def test_calls_in_flight_are_capped_however_parallel_nests(llm, tmp_path, monkey
     monkeypatch.setattr(llm_mod, "PARALLEL", 4)
     monkeypatch.setattr(llm_mod, "_slots", {SMALL_MODEL: Slots()})
     (tmp_path / "x.outline.json").write_text(json.dumps(TREE))
-    cases = [{"tree": str(tmp_path / "x.outline.json"), "node": n, "facts": ["A.", "B."]} for n in ("Method", "Loss", "Encoder")]  # fmt: skip
+    cases = [{"tree": str(tmp_path / "x.outline.json"), "node": n, "facts": ["A.", "B."]} for n in ("Method", "Encoder")]  # fmt: skip
     (tmp_path / "cases.json").write_text(json.dumps(cases))
     cli("eval", tmp_path / "cases.json", "--out", tmp_path)
-    assert 1 <= most[0] <= 2 and len(llm) > 20
+    assert 1 <= most[0] <= 2 and len(llm) > 10
 
 
 def test_independent_calls_run_in_parallel_in_order(llm, tmp_path, monkeypatch):
@@ -94,5 +93,5 @@ def test_parallel_cancels_the_items_not_yet_started_when_one_fails(monkeypatch):
 
     with pytest.raises(ValueError):
         llm_mod.parallel(work, range(20))
-    time.sleep(0.2)
+    time.sleep(0.02)  # time for a queued item to start, were it not cancelled
     assert ran == [0]

@@ -56,12 +56,12 @@ def test_repeat_runs_every_case_several_times_at_once(llm, tmp_path):
     (tmp_path / "x.outline.json").write_text(json.dumps(TREE))
     cases = [{"tree": str(tmp_path / "x.outline.json"), "node": n, "facts": ["A.", "B."]} for n in ("Encoder", "Loss")]  # fmt: skip
     (tmp_path / "cases.json").write_text(json.dumps(cases))
-    output = cli("eval", tmp_path / "cases.json", "--out", tmp_path, "--repeat", 3)
-    assert len(llm.of("judge")) == 2 * 2 * 3
-    assert re.search(r"Encoder +2/2 2/2 2/2", output) and re.search(
-        r"total +4/4 4/4 4/4  mean 4.0", output
+    output = cli("eval", tmp_path / "cases.json", "--out", tmp_path, "--repeat", 2)
+    assert len(llm.of("judge")) == 2 * 2 * 2
+    assert re.search(r"Encoder +2/2 2/2", output) and re.search(
+        r"total +4/4 4/4  mean 4.0", output
     )
     assert (
-        "3 run(s)" in output
-        and "## Loss (run 3)" in next(tmp_path.glob("*.md")).read_text()
+        "2 run(s)" in output
+        and "## Loss (run 2)" in next(tmp_path.glob("*.md")).read_text()
     )

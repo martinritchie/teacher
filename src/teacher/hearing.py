@@ -8,7 +8,6 @@ from pathlib import Path
 
 import numpy as np
 import soundfile
-from scipy.signal import resample_poly
 
 ASR_MODEL = "openai/whisper-small"
 SPEAKER_MODEL = "microsoft/wavlm-base-plus-sv"
@@ -135,6 +134,8 @@ def _words(text: str) -> list[str]:
 
 
 def _load(path: Path) -> np.ndarray:
+    from scipy.signal import resample_poly
+
     audio, rate = soundfile.read(path, dtype="float32")
     audio = audio.mean(1) if audio.ndim > 1 else audio
     return (

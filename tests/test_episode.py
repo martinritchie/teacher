@@ -1,4 +1,4 @@
-"""The script of a `teacher run` episode (episode.py). No server is started: the script model is a pydantic-ai FunctionModel, and speech is a stub, except in the slow test.
+"""The script of a `teacher run` episode (episode.py). No server is started: the script model is a pydantic-ai FunctionModel, and speech is a stub (see tests/conftest.py); the real tokenizer is in a functional test.
 
 Flow under test:
 1. Load the source (PDF path, PDF URL, arXiv URL, or blog post URL).
@@ -15,12 +15,13 @@ Flow under test:
 
 import pytest
 
-from teacher.settings import (
-    WORDS_PER_MINUTE,
-)
+import teacher.episode as episode
+
+from teacher.settings import SCRIPT_MODEL, WORDS_PER_MINUTE
 from teacher.testing import (
     CONTRIBUTIONS,
     PDF,
+    PDF_MARKDOWN,
     SMALL_MODEL,
     block,
     chunk,
@@ -33,28 +34,38 @@ from teacher.testing import (
 )
 
 
-def test_chunk_sets_the_source_tokens_for_each_call(llm, tts, tmp_path):
-    """--chunk is the quality limit, counted with the model's tokenizer. Sections over it are split, so a smaller value gives more chunks."""
+def test_chunk_sets_the_source_tokens_for_each_call(
+    llm, tts, tmp_path, unit, episode_run
+):
+    """--chunk is the quality limit, counted with the model's tokenizer (here, a word count). Sections over it are split, so a smaller value gives more chunks than the default."""
+    run(PDF, "--out", tmp_path, "--chunk", 150)
+    small = llm.of("notes")
+    assert all(len(chunk(c).split()) <= 150 for c in small) and unit == [SMALL_MODEL]
+    assert 1 < len(episode_run.llm.of("notes")) < len(small)
+
+
+@pytest.mark.functional
+def test_chunks_fit_the_real_tokenizer():
+    """The script model's real tokenizer, from the Hugging Face cache, keeps every chunk of the paper within --chunk."""
     from transformers import AutoTokenizer
 
+    from teacher.episode import split_into_chunks
+
     tokens = AutoTokenizer.from_pretrained(SMALL_MODEL)
-    run(PDF, "--out", tmp_path, "--chunk", 500)
-    small = llm.of("notes")
-    assert all(len(tokens.encode(chunk(c))) <= 500 for c in small)
-    llm.clear()
-    run(PDF, "--out", tmp_path, "--chunk", 6000)
-    assert 1 < len(llm.of("notes")) < len(small)
+    chunks = split_into_chunks(PDF_MARKDOWN.read_text(), SMALL_MODEL, 500)
+    assert len(chunks) > 30 and all(len(tokens.encode(c)) <= 500 for c in chunks)
 
 
-def test_chunks_are_the_sources_sections(llm, tts, tmp_path):
+def test_chunks_are_the_sources_sections(episode_run):
     """Each chunk is one section of the source, starting with its heading; a heading with no text of its own joins the next. The outline sees every heading."""
-    run(PDF, "--out", tmp_path)
+    llm = episode_run.llm
     notes, outline = llm.of("notes"), llm.of("outline")[0].prompt
-    assert chunk(notes[1]).startswith(
-        "## ABSTRACT"
-    ) and "## 1 INTRODUCTION" not in chunk(notes[1])
-    assert chunk(notes[2]).startswith("## 1 INTRODUCTION")
-    assert 'heading="ABSTRACT"' in outline
+    assert chunk(notes[0]).startswith(
+        "# CONTINUOUS AUTOREGRESSIVE LANGUAGE MODELS\n\n## ABSTRACT"
+    )  # a bare title
+    assert "## 1 INTRODUCTION" not in chunk(notes[0])
+    assert chunk(notes[1]).startswith("## 1 INTRODUCTION")
+    assert 'heading="CONTINUOUS AUTOREGRESSIVE LANGUAGE MODELS / ABSTRACT"' in outline
     assert 'heading="2 AUTOENCODER / 2.1 HIGH-FIDELITY RECONSTRUCTION"' in outline
 
 
@@ -74,9 +85,9 @@ def test_abstract_then_contributions_then_how_it_works(llm, tts, tmp_path):
     assert script[-5:] == tail and len(script) > 5
 
 
-def test_abstract_is_transcribed_from_the_abstract_alone(llm, tts, tmp_path):
+def test_abstract_is_transcribed_from_the_abstract_alone(episode_run):
     """The abstract reader sees only the text under the abstract heading, and its transcription opens the script."""
-    run(PDF, "--out", tmp_path)
+    llm, tts = episode_run.llm, episode_run.tts
     abstract = block(llm.of("abstract")[0].prompt, "abstract")
     assert "continuous" in abstract.lower() and "introduction" not in abstract.lower()
     assert paragraphs(tts)[0].split()[:5] == abstract.split()[:5]
@@ -102,9 +113,9 @@ def test_abstract_with_symbols_is_transcribed_again(llm, tts, tmp_path):
     )  # the version to fix
 
 
-def test_contributions_see_the_abstract_introduction_and_conclusion(llm, tts, tmp_path):
+def test_contributions_see_the_abstract_introduction_and_conclusion(episode_run):
     """The contributions writer hears the abstract as spoken and reads the introduction and the conclusion."""
-    run(PDF, "--out", tmp_path)
+    llm, tts = episode_run.llm, episode_run.tts
     prompt = llm.of("contributions")[0].prompt
     assert paragraphs(tts)[0] in block(prompt, "heard")
     assert block(prompt, "introduction") and block(prompt, "conclusion")
@@ -121,9 +132,9 @@ def test_contributions_with_symbols_are_written_again(llm, tts, tmp_path):
     assert "Over 99.9% of it." not in tts[0].script
 
 
-def test_outline_sees_every_note_and_what_was_heard(llm, tts, tmp_path):
+def test_outline_sees_every_note_and_what_was_heard(episode_run):
     """All notes come before the outline, which sees every note and the abstract and contributions."""
-    run(PDF, "--out", tmp_path)
+    llm = episode_run.llm
     notes, outline = llm.of("notes"), llm.of("outline")[0]
     assert llm.index(outline) == llm.index(notes[-1]) + 1
     assert all(f"Notes {k}." in outline.prompt for k in range(1, len(notes) + 1))
@@ -170,12 +181,15 @@ def test_a_detail_with_no_valid_answer_keeps_the_outline(llm, tts, tmp_path):
     assert "1. Step 1." in llm.of("method")[0].prompt
 
 
-def test_part_sources_stop_at_the_size_limit(llm, tts, tmp_path):
-    """A component that names many sections gets them in order, up to about four thousand tokens, so the writer and checker stay inside their window."""
+def test_part_sources_stop_at_the_size_limit(llm, tts, tmp_path, monkeypatch):
+    """A component that names many sections gets them in order, up to MAX_SOURCE_CHARS (about four thousand tokens), so the writer and checker stay inside their window."""
+    monkeypatch.setattr(
+        episode, "MAX_SOURCE_CHARS", 3000
+    )  # the short paper is under the real limit
     llm.components = [component(1, list(range(1, 30)))]
     run(PDF, "--out", tmp_path)
     source = source_of(llm.of("method")[0])
-    assert source.startswith(chunk(llm.of("notes")[0])) and 8000 < len(source) <= 16000
+    assert source.startswith(chunk(llm.of("notes")[0])) and 1500 < len(source) <= 3000
 
 
 def test_word_targets_come_from_the_outline_capped(llm, tts, tmp_path):
@@ -195,14 +209,16 @@ def test_minutes_shrinks_the_targets_to_fit(llm, tts, tmp_path):
     assert targets(llm)[1] == pytest.approx(2 * targets(llm)[0], abs=1)
 
 
-def test_only_the_outline_and_check_think(llm, tts, tmp_path):
+def test_only_the_outline_and_check_think(episode_run):
     """Thinking is on for the outline and the check and off for everything else, each with Qwen3's sampling for its mode."""
-    run(PDF, "--out", tmp_path)
+    llm = episode_run.llm
     thinks = {p: s["extra_body"]["chat_template_kwargs"]["enable_thinking"] for p, s in llm.settings.items()}  # fmt: skip
     assert thinks == {"abstract": False, "contributions": False, "notes": False, "outline": True, "detail": True, "method": False, "reconstruct": False, "check": True}  # fmt: skip
 
 
-def test_run_with_a_claude_model_chunks_with_the_local_tokenizer(llm, tts, tmp_path):
+def test_run_with_a_claude_model_chunks_with_the_local_tokenizer(
+    llm, tts, tmp_path, unit
+):
     """An API model has no local tokenizer: chunking for a Claude run counts tokens with the local script model's."""
     result = invoke(
         PDF, "--out", tmp_path, "--model", "claude-sonnet-5-5", "--no-audio"
@@ -211,3 +227,4 @@ def test_run_with_a_claude_model_chunks_with_the_local_tokenizer(llm, tts, tmp_p
     assert llm.started == 0 and {c.model for c in llm} == {
         "claude-sonnet-5-5"
     }  # no vLLM server was started
+    assert unit == [SCRIPT_MODEL]

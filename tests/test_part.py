@@ -18,6 +18,7 @@ def test_each_part_gets_the_glossary_what_was_heard_and_the_previous_part(
     llm, tts, tmp_path
 ):
     """Every part uses the same names, knows what the listener heard, and continues from the last sentences."""
+    llm.components = [component(1, [1]), component(2, [2])]
     run(PDF, "--out", tmp_path)
     parts = llm.of("method")
     assert all("- the encoder (the paper's E): Encodes." in c.prompt for c in parts)

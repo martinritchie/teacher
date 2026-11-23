@@ -1,4 +1,4 @@
-"""Speech (speech.py): markup removed, one clip per paragraph, and real Qwen3-TTS in the slow test."""
+"""Speech (speech.py): markup removed, one clip per paragraph, and real Qwen3-TTS in a functional test."""
 
 import re
 
@@ -24,17 +24,17 @@ def test_markup_never_reaches_tts(llm, tts, tmp_path, monkeypatch):
     assert "The loss falls." in tts[0].script
 
 
-def test_run_saves_one_clip_per_paragraph(llm, tts, tmp_path):
+def test_run_saves_one_clip_per_paragraph(episode_run):
     """Besides the MP3, every paragraph is saved as its own WAV, to check or redo single paragraphs."""
-    run(PDF, "--out", tmp_path)
+    tts, out = episode_run.tts, episode_run.out
     paragraphs = tts[0].script.split("\n\n")
-    clips = sorted((tmp_path / f"{PDF.stem}.clips").glob("*.wav"))
+    clips = sorted((out / f"{PDF.stem}.clips").glob("*.wav"))
     assert [c.name for c in clips[:2]] == ["001.wav", "002.wav"] and len(clips) == len(
         paragraphs
     )
 
 
-@pytest.mark.slow
+@pytest.mark.functional
 def test_voice_model_writes_playable_audio(tmp_path):
     """Real Qwen3-TTS on vLLM-Omni, no stub: two paragraphs become audio of more than two seconds."""
     from teacher.servers import serve_voice_model

@@ -52,6 +52,7 @@ def test_a_claude_model_runs_on_the_api_with_its_own_settings(llm, tmp_path):
     assert not any("temperature" in s or "top_p" in s for s in llm.settings.values())
 
 
+@pytest.mark.functional  # real processes and signals
 def test_sigterm_stops_the_server_and_its_engine(tmp_path):
     """A SIGTERM (a `pkill`, a timeout) unwinds the block, so the server and its engine process are stopped and do
     not keep the GPU; the previous signal handler is put back afterwards."""
@@ -65,6 +66,7 @@ def test_sigterm_stops_the_server_and_its_engine(tmp_path):
     assert signal.getsignal(signal.SIGTERM) is before
 
 
+@pytest.mark.functional  # real processes and signals
 def test_stopping_reaches_an_engine_whose_server_already_exited(tmp_path):
     """If the server process has died but left its engine running, stopping still signals the whole group."""
     script = "import subprocess, sys; e = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(600)']); print(e.pid, flush=True)"  # fmt: skip
@@ -76,6 +78,7 @@ def test_stopping_reaches_an_engine_whose_server_already_exited(tmp_path):
     assert gone(engine)
 
 
+@pytest.mark.functional  # real processes and signals
 def test_a_port_already_serving_a_model_is_refused(tmp_path):
     """On a fixed port where another server answers, starting a second would talk to the wrong one: stop instead."""
     with servers.vllm_server(fake_server(tmp_path), tmp_path / "first.log") as url:

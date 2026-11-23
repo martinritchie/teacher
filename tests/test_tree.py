@@ -149,8 +149,6 @@ def test_a_parents_own_text_is_narrated_before_its_children(llm, tmp_path):
     (tmp_path / "x.outline.json").write_text(json.dumps(tree))
     cli("write", tmp_path / "x.outline.json", "--node", "5.3", "--out", tmp_path)
     assert [source_of(c) for c in llm.of("leaf notes")] == [long_intro, "The algorithm counts.", "The bias vanishes."]  # fmt: skip
-    llm.clear()
-    cli("write", tmp_path / "x.outline.json", "--node", "Batch", "--out", tmp_path)
     tree[0]["text"] = "## 5.3 Batch\n"
     (tmp_path / "x.outline.json").write_text(json.dumps(tree))
     llm.clear()

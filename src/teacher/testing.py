@@ -16,6 +16,11 @@ from typer.testing import CliRunner
 from teacher.cli import app
 
 PDF = next((Path(__file__).parents[2] / "papers").glob("CALM*/*.pdf"))
+DATA = Path(__file__).parents[2] / "tests/data"
+PDF_MARKDOWN = DATA / "calm.md"  # MinerU's Markdown of PDF
+SHORT_MARKDOWN = (
+    DATA / "calm-short.md"
+)  # the sections the unit tests name, two paragraphs each: what PDF reads as in them
 
 
 SMALL_MODEL = "Qwen/Qwen3-0.6B"  # only its tokenizer is downloaded

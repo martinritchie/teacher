@@ -16,10 +16,6 @@ import httpx
 import typer
 from pydantic_ai.exceptions import ModelHTTPError
 from pydantic_ai.models import Model
-from pydantic_ai.models.anthropic import AnthropicModel
-from pydantic_ai.models.openai import OpenAIChatModel
-from pydantic_ai.providers.anthropic import AnthropicProvider
-from pydantic_ai.providers.openai import OpenAIProvider
 
 from teacher.settings import CLAUDE_KEY, profile
 
@@ -37,9 +33,7 @@ def serve_script_model(
     cmd = ["vllm", "serve", model, *profile(model)["server"]]
     with nullcontext(server) if server else vllm_server(cmd, log) as url:
         try:
-            yield OpenAIChatModel(
-                model, provider=OpenAIProvider(base_url=f"{url}/v1", api_key="-")
-            )
+            yield served(model, url)
         except ModelHTTPError as e:
             typer.echo(
                 f"vLLM rejected a call: {e.body}\nIf it is too long, lower --chunk."
@@ -47,7 +41,17 @@ def serve_script_model(
             raise typer.Exit(1)
 
 
-def claude(model: str) -> AnthropicModel:
+def served(model: str, url: str) -> Model:
+    """A model on a vLLM server's OpenAI-compatible API. The client libraries are imported here, as they are slow to import."""
+    from pydantic_ai.models.openai import OpenAIChatModel
+    from pydantic_ai.providers.openai import OpenAIProvider
+
+    return OpenAIChatModel(
+        model, provider=OpenAIProvider(base_url=f"{url}/v1", api_key="-")
+    )
+
+
+def claude(model: str) -> Model:
     """Claude on the Anthropic API, with the key from the CLAUDE_API_KEY variable or the repo's .env file."""
     env = Path(__file__).parents[2] / ".env"
     lines = (
@@ -66,6 +70,9 @@ def claude(model: str) -> AnthropicModel:
             f"{model} needs an Anthropic API key: set {CLAUDE_KEY}, or add {CLAUDE_KEY}=... to {env}."
         )
         raise typer.Exit(1)
+    from pydantic_ai.models.anthropic import AnthropicModel
+    from pydantic_ai.providers.anthropic import AnthropicProvider
+
     return AnthropicModel(model, provider=AnthropicProvider(api_key=key))
 
 

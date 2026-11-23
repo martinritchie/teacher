@@ -165,15 +165,18 @@ uv run teacher outline paper.pdf --server http://127.0.0.1:8000       # a new tr
 ## Development
 
 ```bash
-make test       # fast tests: the script model is a pydantic-ai FunctionModel and speech is stubbed; MinerU runs once per session
-make test-all   # also the slow test, which runs real Qwen3-TTS
-make coverage   # fast tests with a coverage report: missing lines in the terminal, and htmlcov/index.html
-make check      # ruff format and lint
+make test             # unit tests: under 2 seconds, offline, no GPU
+make test-functional  # functional tests: real MinerU, Qwen3-TTS, tokenizer and server processes; minutes, on the GPU
+make test-all         # both
+make coverage         # unit tests with a coverage report: missing lines in the terminal, and htmlcov/index.html
+make check            # ruff format and lint
 ```
 
-`tests/` mirrors `src/teacher/`: `tests/test_tree.py` specifies `tree.py`, `tests/commands/test_run.py` specifies `commands/run.py`, and so on. Shared fixtures (the stub model, stub speech, the PDF converted once per session) are in `tests/conftest.py`. Helpers that tests call directly are in `src/teacher/testing.py`: tests run in pytest's `importlib` import mode, where test modules cannot import each other, and pytest's docs recommend keeping such utilities with the library code. Coverage leaves that file out.
+Unit tests are for feedback on every change: plain `uv run pytest` runs only them. They run in airplane mode: a socket to anything but loopback fails the test. The script model is a pydantic-ai FunctionModel whose replies follow each agent's phase, speech returns silence, tokens are counted as words, and the CALM PDF reads as `tests/data/calm-short.md`, a short version of MinerU's Markdown of it (`tests/data/calm.md`). Tests that only read what a default run did share one run (the `episode_run` fixture), since each stub call costs about 3 ms of pydantic-ai.
 
-The tests that convert the CALM paper load MinerU on the GPU, so stop `teacher serve` first (`pkill -f "teacher serve"`); the others need no GPU.
+A test that needs a real model, the GPU, the network or real processes and signals is marked `@pytest.mark.functional`. One of them checks that MinerU still converts the PDF to `tests/data/calm.md`'s headings; if MinerU's output changes, save the new output there. Stop `teacher serve` before `make test-functional` (`pkill -f "teacher serve"`), since its tests load models on the GPU.
+
+`tests/` mirrors `src/teacher/`: `tests/test_tree.py` specifies `tree.py`, `tests/commands/test_run.py` specifies `commands/run.py`, and so on. Shared fixtures are in `tests/conftest.py`. Helpers that tests call directly are in `src/teacher/testing.py`: tests run in pytest's `importlib` import mode, where test modules cannot import each other, and pytest's docs recommend keeping such utilities with the library code. Coverage leaves that file out.
 
 ## Development plan
 
