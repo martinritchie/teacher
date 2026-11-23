@@ -3,6 +3,7 @@
 import json
 import re
 
+from teacher.judge import _quoted
 from teacher.testing import (
     TREE,
     cli,
@@ -25,4 +26,15 @@ def test_a_verdict_whose_quote_is_not_in_the_narration_counts_as_missing(llm, tm
     llm.quote = "part ONE"  # case and edge punctuation do not matter
     assert re.search(
         r"Encoder +1/1", cli("eval", tmp_path / "cases.json", "--out", tmp_path)
+    )
+
+
+def test_a_quote_may_join_sentences_from_different_places():
+    """Each sentence of a quote is looked for on its own; an invented sentence still fails."""
+    narration = (
+        "The encoder maps tokens. Then the loss is computed. The decoder rebuilds them."
+    )
+    assert _quoted("The encoder maps tokens. The decoder rebuilds them.", narration)
+    assert not _quoted(
+        "The encoder maps tokens. The decoder is a Transformer.", narration
     )

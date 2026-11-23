@@ -6,6 +6,7 @@ included. Agreement is reported overall and per verdict, since "stated" is most 
 always says it would agree often while being useless.
 """
 
+import hashlib
 import json
 from collections import Counter
 from pathlib import Path
@@ -31,20 +32,32 @@ def judge_bench(
     server: str = typer.Option(
         None, help="URL of a running `teacher serve`; skips starting vLLM"
     ),
+    split: str = typer.Option(
+        "all",
+        help="dev (tune the judge prompt on it), test (report only at the end) or all; split by fact, so a fact never crosses",
+    ),
     limit: int = typer.Option(0, help="Judge only the first N facts; 0 for all"),
     out: Path = typer.Option(Path("out/judge-bench"), help="Output directory"),
 ):
     """Judge every recorded (narration, fact) pair with --model; print agreement with Claude, and write the
     disagreements to <out>/<model>.md."""
     groups = [json.loads(line) for line in reference.read_text().splitlines()]
-    cases = [(g["narration"], f) for g in groups for f in g["facts"]][: limit or None]
+    cases = [
+        (g["narration"], f)
+        for g in groups
+        for f in g["facts"]
+        if split in ("all", half(f["fact"]))
+    ]
+    cases = cases[: limit or None]
     out.mkdir(parents=True, exist_ok=True)
-    name = model.replace("/", "_")
+    name = f"{model.replace('/', '_')}.{split}"
+    start_trace(
+        out / f"{name}.trace.jsonl"
+    )  # before the server, so its startup is recorded
     with serve_script_model(model, out / f"{name}.model.log", server) as llm:
-        start_trace(out / f"{name}.trace.jsonl")
         got = parallel(lambda c: judge(c[1]["fact"], c[0], llm), cases)
     gold, pred = [f["verdict"] for _, f in cases], [v for v, _, _ in got]
-    lines = [f"{model}: {len(cases)} facts", *agreement(gold, pred)]
+    lines = [f"{model}, {split}: {len(cases)} facts", *agreement(gold, pred)]
     report = ["```", *lines, "```"]
     for (narration, f), (verdict, quote, flag) in zip(cases, got):
         if verdict != f["verdict"]:
@@ -52,6 +65,11 @@ def judge_bench(
                        f"**Candidate quote:** {quote or '-'}{f' ({flag})' if flag else ''}", narration]  # fmt: skip
     (out / f"{name}.md").write_text("\n\n".join(report) + "\n")
     typer.echo("\n".join(lines) + f"\n\nDisagreements in {out / name}.md")
+
+
+def half(fact: str) -> str:
+    """dev or test, fixed for each fact."""
+    return "dev" if hashlib.md5(fact.encode()).digest()[0] % 2 == 0 else "test"
 
 
 def agreement(gold: list[str], pred: list[str]) -> list[str]:

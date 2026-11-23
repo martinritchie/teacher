@@ -39,11 +39,14 @@ def judge(fact: str, narration: str, llm: Model) -> tuple[str, str, str]:
 
 
 def _quoted(quote: str, narration: str) -> bool:
-    """Every passage of the quote (split at '...') is in the narration: at least 90% of its words appear, in
-    order, in a window of the narration as long as the passage. Case and punctuation are ignored."""
+    """Every passage of the quote (split at '...' and between sentences, since judges join sentences from
+    different places) is in the narration: at least 90% of its words appear, in order, in a window of the
+    narration as long as the passage. Case and punctuation are ignored."""
     words = lambda s: re.findall(r"[a-z0-9]+", s.lower())  # noqa: E731
     text = words(narration)
-    passages = [w for p in re.split(r"\.\.\.|…", quote) if (w := words(p))]
+    passages = [
+        w for p in re.split(r"\.\.\.|…|(?<=[.!?])\s+", quote) if (w := words(p))
+    ]
     return bool(passages) and all(_in_order(p, text) for p in passages)
 
 

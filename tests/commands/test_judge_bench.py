@@ -2,7 +2,7 @@
 
 import json
 
-from teacher.commands.judge_bench import agreement
+from teacher.commands.judge_bench import agreement, half
 from teacher.testing import SMALL_MODEL, cli
 
 
@@ -35,8 +35,16 @@ def test_judge_bench_judges_every_recorded_fact_and_lists_disagreements(llm, tmp
         "agreement 0.500" in output
         and "missing       Claude    1  candidate    0" in output
     )
-    report = (tmp_path / f"{SMALL_MODEL.replace('/', '_')}.md").read_text()
+    report = (tmp_path / f"{SMALL_MODEL.replace('/', '_')}.all.md").read_text()
     assert (
         f"## Claude: missing, {SMALL_MODEL}: stated" in report
         and "The decoder is a Transformer." in report
     )
+
+
+def test_the_split_is_by_fact_and_fixed(llm, tmp_path):
+    """dev and test never share a fact, so tuning the judge prompt on dev cannot leak into the test score."""
+    facts = [f"Fact {k}." for k in range(40)]
+    assert {half(f) for f in facts} == {"dev", "test"} and [half(f) for f in facts] == [
+        half(f) for f in facts
+    ]
