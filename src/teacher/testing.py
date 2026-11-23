@@ -67,6 +67,7 @@ class Calls(list):
     components: list[dict] | None = None  # the outline's; default is one per chunk
     parts: list[str] = []  # replies to the method calls; default "Part k."
     served: str = ""  # the model the script server was started with
+    server: list = []  # the vLLM command it was started with
     settings: dict = {}  # model settings of each phase
 
     def of(self, phase):

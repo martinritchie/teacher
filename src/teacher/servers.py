@@ -110,8 +110,9 @@ def _tts_config(temperature: float, path: Path) -> Path:
 
 @contextmanager
 def vllm_server(cmd: list[str], log: Path, port: int | None = None) -> Iterator[str]:
-    """Run `cmd` (a vLLM server) on `port`, or a free one, for the length of the block; yields its URL. The server
-    is stopped however the block ends, including on SIGTERM or SIGHUP (a `pkill`, a closed terminal)."""
+    """Run `cmd` (a vLLM server) on `port`, or a free one, for the length of
+    the block; yields its URL. The server is stopped however the block ends, including on SIGTERM or SIGHUP (a
+    `pkill`, a closed terminal). Its command and startup time go in the trace."""
     port = port or _free_port()
     url = f"http://127.0.0.1:{port}"
     if _is_ready(
@@ -142,7 +143,11 @@ def vllm_server(cmd: list[str], log: Path, port: int | None = None) -> Iterator[
     try:
         start = time.monotonic()
         _wait_until_ready(proc, url, log)
-        record(server=cmd[2], startup_seconds=round(time.monotonic() - start, 1))
+        record(
+            server=cmd[2],
+            args=cmd[3:],
+            startup_seconds=round(time.monotonic() - start, 1),
+        )
         yield url
     finally:
         _stop(proc)

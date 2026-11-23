@@ -31,11 +31,17 @@ PROFILES = {
     # can otherwise think until the window is full and return no answer. The KV cache is a fixed 3.5 GiB, about
     # 23k tokens of Qwen3-14B, next to 9.4 GiB of weights on a 16 GB card (4.5 GiB runs out of memory); vLLM's
     # own estimate collapses on a fresh compile.
+    # JSON output allows no free whitespace: with it, the detailer's answer could turn into thousands of blank lines
+    # until the token cap, then be retried. vLLM allows that option only with the backend named.
     "Qwen/Qwen3-": {
         "parallel": 6,
         "server": [
             *"--kv-cache-memory-bytes 3758096384 --max-num-seqs 8 --max-num-batched-tokens 2048".split(),
             *["--max-model-len", str(CONTEXT), "--reasoning-parser", "qwen3"],
+            *[
+                "--structured-outputs-config",
+                '{"backend": "xgrammar", "disable_any_whitespace": true}',
+            ],
         ],
         "writing": {
             "max_tokens": 2048,

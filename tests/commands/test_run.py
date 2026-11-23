@@ -35,9 +35,13 @@ def test_rejected_call_is_an_error(llm, tts, tmp_path):
 
 
 def test_models_are_cli_arguments(llm, tts, tmp_path):
-    """--model is the model vLLM serves. --voice reaches the TTS."""
+    """--model is the model vLLM serves, with its profile's arguments. --voice reaches the TTS."""
+    run(PDF, "--out", tmp_path, "--voice", "aiden", "--no-audio")
+    assert (
+        llm.server[:3] == ["vllm", "serve", SMALL_MODEL] and llm.served == SMALL_MODEL
+    )
+    assert "--structured-outputs-config" in llm.server  # JSON with no free whitespace
     run(PDF, "--out", tmp_path, "--voice", "aiden")
-    assert llm.served == SMALL_MODEL
     assert tts[0].voice == "aiden"
 
 

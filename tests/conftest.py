@@ -145,7 +145,7 @@ def _llm(monkeypatch):
 
     @contextmanager
     def no_server(cmd, log, port=None):
-        calls.started += 1
+        calls.started, calls.server = calls.started + 1, cmd
         yield "http://server"
 
     def stub(
