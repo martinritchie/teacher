@@ -30,8 +30,20 @@ environments = ["sys_platform == 'linux'"]
 [dependency-groups]
 dev = [
     "pytest>=9.0.3",
+    "pytest-cov>=7.1.0",
     "ruff>=0.14.4",
 ]
 
 [tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = ["--import-mode=importlib"]  # pytest's recommendation for new projects; test files need not have unique names
 markers = ["slow: loads real models"]
+
+[tool.coverage.run]
+source = ["teacher"]
+branch = true
+omit = ["*/teacher/testing.py"]  # helpers for the tests themselves
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false

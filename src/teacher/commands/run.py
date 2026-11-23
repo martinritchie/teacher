@@ -14,7 +14,7 @@ from teacher.episode import split_into_chunks, write_episode
 from teacher.servers import serve_script_model, serve_voice_model
 from teacher.settings import SCRIPT_MODEL, VOICE, VOICE_MODEL
 from teacher.source import read_source
-from teacher.speech import make_speakable, save, speak
+from teacher.speech import Voice, make_speakable, save, speak
 
 
 def run(
@@ -48,12 +48,13 @@ def run(
         )
 
     paragraphs = make_speakable(script)
+    save(
+        out, paper.name, paragraphs
+    )  # before speech, so a failure there keeps the script
+    typer.echo(f"Wrote {out / paper.name}.md")
 
     if audio:
         with serve_voice_model(VOICE_MODEL, out / "voice-model.log") as tts:
-            audio = speak(paragraphs, voice, tts)
-
-    save(out, paper.name, paragraphs, audio)
-    typer.echo(
-        f"Wrote {out / paper.name}.md{' and .mp3' if audio is not False else ''}"
-    )
+            clips = speak(paragraphs, Voice(speaker=voice), tts)
+        save(out, paper.name, paragraphs, clips)
+        typer.echo(f"Wrote {out / paper.name}.mp3")

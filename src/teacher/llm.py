@@ -90,9 +90,13 @@ def ask_until(
 
 
 def parallel(fn: Callable, items: Iterable) -> list:
-    """`fn` over `items` on up to PARALLEL threads, results in order. Calls in flight are capped per model in `ask`."""
-    with ThreadPoolExecutor(PARALLEL) as pool:
+    """`fn` over `items` on up to PARALLEL threads, results in order. Calls in flight are capped per model in `ask`.
+    If one fails, or Ctrl-C is pressed, the items not yet started are cancelled rather than run."""
+    pool = ThreadPoolExecutor(PARALLEL)
+    try:
         return list(pool.map(fn, items))
+    finally:
+        pool.shutdown(wait=False, cancel_futures=True)
 
 
 def start_trace(path: Path) -> None:

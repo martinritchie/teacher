@@ -7,6 +7,7 @@ PROMPTS = Path(__file__).parent / "prompts"
 
 SCRIPT_MODEL = "Qwen/Qwen3-14B-AWQ"
 VOICE_MODEL = "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice"
+VOICE_CLONE_MODEL = "Qwen/Qwen3-TTS-12Hz-1.7B-Base"  # imitates a reference clip (`teacher speak --clone`)
 VOICE = "ryan"
 LANGUAGE = "English"
 

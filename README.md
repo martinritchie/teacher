@@ -165,10 +165,13 @@ uv run teacher outline paper.pdf --server http://127.0.0.1:8000       # a new tr
 ## Development
 
 ```bash
-uv run pytest -m "not slow"  # script model (a pydantic-ai FunctionModel) and TTS stubbed; real MinerU runs once per session
-make test                    # also the slow test, which runs real Qwen3-TTS
-make check                   # ruff format and lint
+make test       # fast tests: the script model is a pydantic-ai FunctionModel and speech is stubbed; MinerU runs once per session
+make test-all   # also the slow test, which runs real Qwen3-TTS
+make coverage   # fast tests with a coverage report: missing lines in the terminal, and htmlcov/index.html
+make check      # ruff format and lint
 ```
+
+`tests/` mirrors `src/teacher/`: `tests/test_tree.py` specifies `tree.py`, `tests/commands/test_run.py` specifies `commands/run.py`, and so on. Shared fixtures (the stub model, stub speech, the PDF converted once per session) are in `tests/conftest.py`. Helpers that tests call directly are in `src/teacher/testing.py`: tests run in pytest's `importlib` import mode, where test modules cannot import each other, and pytest's docs recommend keeping such utilities with the library code. Coverage leaves that file out.
 
 The tests that convert the CALM paper load MinerU on the GPU, so stop `teacher serve` first (`pkill -f "teacher serve"`); the others need no GPU.
 

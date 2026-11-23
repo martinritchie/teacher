@@ -22,7 +22,7 @@ from teacher.part import (
     Term,
     write_part,
 )
-from teacher.settings import WORDS_PER_MINUTE
+from teacher.settings import SCRIPT_MODEL, WORDS_PER_MINUTE
 from teacher.speech import unspoken
 
 MAX_SECTION_CHARS = 12000  # about 3k tokens of abstract, introduction or conclusion
@@ -65,7 +65,8 @@ class Method(BaseModel):
         description="Every quantity, module or procedure the method names. All later parts use these names only."
     )
     components: list[Component] = Field(
-        description="Two to seven, in the order someone implementing the method would build them."
+        min_length=1,
+        description="Two to seven, in the order someone implementing the method would build them.",
     )
     key_numbers: list[str] = Field(
         description="Only values a first implementation needs, each written in words with what it controls, e.g. 'four tokens per vector'."
@@ -86,7 +87,10 @@ def split_into_chunks(markdown: str, model: str, max_tokens: int) -> list[str]:
     for s in re.split(r"(?m)^(?=#)", markdown):
         heading_only = sections and "\n" not in sections[-1].strip()
         sections[-1:] = [sections[-1] + s] if heading_only else [*sections[-1:], s]
-    split = semchunk.chunkerify(model, max_tokens)
+    tokenizer = (
+        SCRIPT_MODEL if model.startswith("claude-") else model
+    )  # an API model has no local tokenizer
+    split = semchunk.chunkerify(tokenizer, max_tokens)
     return [c for s in sections if s.strip() for c in split(s.strip())]
 
 

@@ -6,6 +6,7 @@ import signal
 import socket
 import subprocess
 import sys
+import threading
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager, nullcontext
@@ -69,42 +70,99 @@ def claude(model: str) -> AnthropicModel:
 
 
 @contextmanager
-def serve_voice_model(model: str, log: Path) -> Iterator[str]:
-    """The TTS model on vLLM-Omni's speech server. Yields its base URL."""
-    with vllm_server(["vllm-omni", "serve", model, "--omni"], log) as url:
+def serve_voice_model(
+    model: str, log: Path, temperature: float | None = None
+) -> Iterator[str]:
+    """The TTS model on vLLM-Omni's speech server. Yields its base URL. A `temperature` replaces the sampling
+    temperature of both token stages (vLLM-Omni's default for Qwen3-TTS is 0.9), through a copy of its deploy
+    config written next to the log."""
+    cmd = ["vllm-omni", "serve", model, "--omni"]
+    if temperature is not None:
+        cmd += [
+            "--deploy-config",
+            str(_tts_config(temperature, log.with_suffix(".deploy.yaml"))),
+        ]
+    with vllm_server(cmd, log) as url:
         yield url
+
+
+def _tts_config(temperature: float, path: Path) -> Path:
+    import vllm_omni
+    import yaml
+
+    config = yaml.safe_load(
+        (Path(vllm_omni.__file__).parent / "deploy" / "qwen3_tts.yaml").read_text()
+    )
+    talker = config["stages"][0]
+    talker["default_sampling_params"]["temperature"] = temperature
+    talker["subtalker_sampling_params"]["temperature"] = temperature
+    path.write_text(yaml.safe_dump(config, sort_keys=False))
+    return path
 
 
 @contextmanager
 def vllm_server(cmd: list[str], log: Path, port: int | None = None) -> Iterator[str]:
-    """Run `cmd` (a vLLM server) on `port`, or a free one, for the length of the block; yields its URL."""
+    """Run `cmd` (a vLLM server) on `port`, or a free one, for the length of the block; yields its URL. The server
+    is stopped however the block ends, including on SIGTERM or SIGHUP (a `pkill`, a closed terminal)."""
     port = port or _free_port()
     url = f"http://127.0.0.1:{port}"
+    if _is_ready(
+        url
+    ):  # a server already answers there; ours could not bind, and we would talk to the wrong one
+        typer.echo(
+            f"Port {port} is already serving a model; stop it or choose another port.",
+            err=True,
+        )
+        raise typer.Exit(1)
     exe = str(Path(sys.executable).with_name(cmd[0]))
     typer.echo(f"Starting {cmd[2]}, log in {log}...")
-    proc = subprocess.Popen(
-        [exe, *cmd[1:], "--port", str(port)],
-        stdout=log.open("w"),
-        stderr=subprocess.STDOUT,
-        start_new_session=True,  # its own process group, so its engine processes stop with it
+    main = (
+        threading.current_thread() is threading.main_thread()
+    )  # signal handlers can only be set there
+    handlers = (
+        {s: signal.signal(s, _exit_on_signal) for s in (signal.SIGTERM, signal.SIGHUP)}
+        if main
+        else {}
     )
+    with log.open("w") as out:
+        proc = subprocess.Popen(
+            [exe, *cmd[1:], "--port", str(port)],
+            stdout=out,
+            stderr=subprocess.STDOUT,
+            start_new_session=True,  # its own process group, so its engine processes stop with it
+        )
     try:
         _wait_until_ready(proc, url, log)
         yield url
     finally:
         _stop(proc)
+        for s, handler in handlers.items():
+            signal.signal(s, handler)
+
+
+def _exit_on_signal(signum, frame) -> None:
+    raise SystemExit(
+        128 + signum
+    )  # unwinds the `with` blocks, so every server started is stopped
 
 
 def _stop(proc: subprocess.Popen) -> None:
-    """SIGTERM the server's process group; SIGKILL it if it is still up after a minute."""
-    if proc.poll() is not None:  # already exited, e.g. it failed to start
-        return
-    os.killpg(proc.pid, signal.SIGTERM)
-    try:
-        proc.wait(timeout=60)
-    except subprocess.TimeoutExpired:
-        os.killpg(proc.pid, signal.SIGKILL)
-        proc.wait()
+    """SIGTERM the server's whole process group and wait until every process in it has gone, SIGKILL whatever is
+    left after a minute. The group is signalled even if its leader has already exited: an engine process left
+    behind would keep the GPU."""
+    for sig, seconds in ((signal.SIGTERM, 60), (signal.SIGKILL, 10)):
+        try:
+            os.killpg(proc.pid, sig)
+        except ProcessLookupError:
+            return
+        deadline = time.monotonic() + seconds
+        while time.monotonic() < deadline:
+            proc.poll()  # reap the leader, so it does not linger as a zombie in the group
+            try:
+                os.killpg(proc.pid, 0)  # is anyone left in the group?
+            except ProcessLookupError:
+                return
+            time.sleep(0.2)
 
 
 def _free_port() -> int:
@@ -114,11 +172,12 @@ def _free_port() -> int:
 
 
 def _wait_until_ready(proc: subprocess.Popen, url: str, log: Path) -> None:
-    while not _is_ready(url):
-        if proc.poll() is not None:
-            typer.echo(f"Server exited; see {log}", err=True)
-            raise typer.Exit(1)
+    while proc.poll() is None:
+        if _is_ready(url):
+            return
         time.sleep(2)
+    typer.echo(f"Server exited; see {log}", err=True)
+    raise typer.Exit(1)
 
 
 def _is_ready(url: str) -> bool:

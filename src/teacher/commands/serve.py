@@ -1,7 +1,6 @@
 """`teacher serve`: keep the script model running, so other commands can skip starting it (--server)."""
 
 import signal
-import sys
 import time
 from pathlib import Path
 
@@ -18,9 +17,8 @@ def serve(
 ):
     """Serve the script model until Ctrl-C. Pass the printed URL to other commands as --server."""
     log.parent.mkdir(parents=True, exist_ok=True)
-    # Stop vLLM (its own process group) on Ctrl-C or `pkill -f "teacher serve"`, even when started in the background.
+    # Ctrl-C stops it even when started in the background, where SIGINT is ignored; vllm_server handles SIGTERM.
     signal.signal(signal.SIGINT, signal.default_int_handler)
-    signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
     with vllm_server(
         ["vllm", "serve", model, *profile(model)["server"]], log, port
     ) as url:
