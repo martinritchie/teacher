@@ -98,5 +98,8 @@ for _name, _value in {
     "VLLM_USE_FLASHINFER_SAMPLER": "0",  # FlashInfer JITs with the system nvcc; SM120 needs CUDA >= 12.9
     "MINERU_PROCESSING_WINDOW_SIZE": "8",  # PDF pages in RAM at once
     "TORCHINDUCTOR_COMPILE_THREADS": "1",
+    # The CUDA driver's cache of kernels it compiled for this GPU. Every model here needs about 1.4 GB of them; at
+    # the default 1 GiB, entries are evicted and recompiled, and a vLLM start can stall a minute in graph capture.
+    "CUDA_CACHE_MAXSIZE": str(4 * 2**30),
 }.items():
     os.environ.setdefault(_name, _value)

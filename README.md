@@ -121,6 +121,7 @@ uv run teacher run paper.pdf --no-audio                             # script onl
 | Variable | Value | Why |
 |---|---|---|
 | `VLLM_USE_FLASHINFER_SAMPLER` | `0` | FlashInfer compiles with the system `nvcc`, and Blackwell GPUs need CUDA ≥ 12.9 |
+| `CUDA_CACHE_MAXSIZE` | 4 GiB | The driver's cache of kernels compiled for this GPU. Our models need about 1.4 GB; at the default 1 GiB, kernels are evicted and recompiled, and a vLLM start stalls up to a minute in CUDA-graph capture |
 | `MINERU_PROCESSING_WINDOW_SIZE` | `8` | Pages held in RAM at once |
 | `TORCHINDUCTOR_COMPILE_THREADS` | `1` | Keeps the vLLM compile step's RAM down |
 | `MINERU_TELEMETRY_DISABLED` | `1` | MinerU sends usage telemetry by default |
