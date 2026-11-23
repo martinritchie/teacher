@@ -138,7 +138,7 @@ Everything a command writes goes under `out/`, which git ignores:
 | Path | Written by | Contents |
 |---|---|---|
 | `out/run/<name>.md`, `.mp3` | `run` | The script and the audio |
-| `out/<command>/<name>.trace.jsonl` | every command | Every model call, one JSON line each: the agent (such as `part/writer`), the model, the message, the reply, any error, its seconds, and its input and output tokens. Also each server's startup seconds and, for `run`, the seconds of each stage (read, write, speak), for benchmarking. The first place to look when a part comes out wrong |
+| `out/<command>/<name>.trace.jsonl` | every command | Every model call, one JSON line each: the agent (such as `part/writer`), the model, the message, the reply, any error, its seconds, its input and output tokens, and why each model request ended (`finish_reasons`, such as `length` at the token cap). A call that needed more than one request also keeps every request and reply (`messages`), the failed attempts' reasoning included. Also each server's startup seconds and, for `run`, the seconds of each stage (read, write, speak), for benchmarking. The first place to look when a part comes out wrong |
 | `out/outline/<name>.outline.md`, `.json` | `outline` | The nested headings; the tree with each node's text |
 | `out/write/<name>.<node>.md` | `write` | The narration of one node |
 | `out/eval/<time>.md` | `eval` | The score table, each narration, and each fact's verdict with the judge's quote |

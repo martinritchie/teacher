@@ -61,6 +61,13 @@ def test_a_check_with_no_valid_answer_counts_as_no_problems(llm, tts, tmp_path):
     trace = (tmp_path / f"{PDF.stem}.trace.jsonl").read_text().splitlines()
     checks = [json.loads(t) for t in trace if '"part/checker"' in t]
     assert "error" in checks[0] and checks[0]["output"] == {"problems": []}
+    replies = [
+        m for m in checks[0]["messages"] if m["kind"] == "response"
+    ]  # the failed attempts are kept
+    assert (
+        len(replies) == checks[0]["requests"] == len(checks[0]["finish_reasons"]) == 2
+    )
+    assert "not a verdict" in json.dumps(replies[0])
 
 
 def test_failed_check_gives_one_rewrite(llm, tts, tmp_path):

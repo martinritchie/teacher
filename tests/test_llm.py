@@ -39,6 +39,9 @@ def test_the_trace_records_tokens_and_the_time_of_each_stage(episode_run):
         c["input_tokens"] > 0 and c["output_tokens"] > 0 and c["requests"] == 1
         for c in calls
     )
+    assert all(
+        len(c["finish_reasons"]) == 1 and "messages" not in c for c in calls
+    )  # one request: no history kept
     stages = [line for line in lines if "stage" in line]
     assert [s["stage"] for s in stages] == ["read", "write", "speak"]
     assert all(isinstance(s["seconds"], float) for s in stages)

@@ -16,8 +16,9 @@ from pathlib import Path
 
 import jinja2
 from pydantic import BaseModel, Field
-from pydantic_ai import Agent, NativeOutput
+from pydantic_ai import Agent, NativeOutput, capture_run_messages
 from pydantic_ai.exceptions import UnexpectedModelBehavior
+from pydantic_ai.messages import ModelMessagesTypeAdapter, ModelResponse
 from pydantic_ai.models import Model
 
 from teacher.settings import PARALLEL, PROMPTS, profile
@@ -57,7 +58,7 @@ def agent(name: str, output=str, thinks: bool = False) -> Agent:
 def ask(agent: Agent, llm: Model, fallback=None, **values):
     """One call, traced. With a `fallback`, a reply that is not valid output (e.g. thinking that ran out of
     tokens) gives the fallback instead of ending the run."""
-    prompt, error, usage = _render(f"{agent.name}_task.md", **values), None, None
+    prompt, error = _render(f"{agent.name}_task.md", **values), None
     family = profile(llm.model_name)
     settings = family["thinking" if _thinks[agent.name] else "writing"]
     slots = _slots.setdefault(
@@ -65,19 +66,34 @@ def ask(agent: Agent, llm: Model, fallback=None, **values):
     )
     try:
         with slots:
-            start = time.monotonic()
-            call = agent.run(prompt, model=llm, model_settings=settings)
-            result = asyncio.run_coroutine_threadsafe(call, _loop).result()
-            output, usage = result.output, result.usage
+            start, messages = time.monotonic(), []
+            call = _run(agent, prompt, llm, settings, messages)
+            output = asyncio.run_coroutine_threadsafe(call, _loop).result().output
     except UnexpectedModelBehavior as e:
         if fallback is None:
             raise
         output, error = fallback, str(e)
     saved = output.model_dump() if isinstance(output, BaseModel) else output
-    seconds = round(time.monotonic() - start, 1)
-    tokens = {"input_tokens": usage.input_tokens, "output_tokens": usage.output_tokens, "requests": usage.requests} if usage else {}  # fmt: skip
-    record(call=agent.name, model=llm.model_name, seconds=seconds, **tokens, prompt=prompt, output=saved, **({"error": error} if error else {}))  # fmt: skip
+    replies = [m for m in messages if isinstance(m, ModelResponse)]
+    line = {"call": agent.name, "model": llm.model_name, "seconds": round(time.monotonic() - start, 1),
+            "input_tokens": sum(r.usage.input_tokens for r in replies), "output_tokens": sum(r.usage.output_tokens for r in replies),
+            "requests": len(replies), "finish_reasons": [r.finish_reason for r in replies], "prompt": prompt, "output": saved}  # fmt: skip
+    if (
+        error or len(replies) > 1
+    ):  # keep the failed attempts, reasoning included, and what was sent after them
+        line |= {"error": error} if error else {}
+        line["messages"] = ModelMessagesTypeAdapter.dump_python(messages, mode="json")
+    record(**line)
     return output
+
+
+async def _run(agent: Agent, prompt: str, llm: Model, settings: dict, messages: list):
+    """agent.run, with every request and reply of the run added to `messages`, even when it fails."""
+    with capture_run_messages() as captured:
+        try:
+            return await agent.run(prompt, model=llm, model_settings=settings)
+        finally:
+            messages.extend(captured)
 
 
 def ask_until(
