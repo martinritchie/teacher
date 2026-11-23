@@ -55,7 +55,7 @@ Both diagrams are drawn in [Excalidraw](https://excalidraw.com). Each SVG in `do
 | Writer | `part/writer` | writing | text |
 | Listener | `part/listener` | writing | `Reconstruction` |
 | Checker | `part/checker` | thinking | `Problems` |
-| Judge | `eval/judge` | thinking, always Claude | `Verdict` |
+| Judge | `eval/judge` | thinking, `settings.JUDGE_MODEL` (Qwen3-14B) | `Verdict` |
 
 ### The outline tree (in progress)
 
@@ -167,7 +167,9 @@ uv run teacher write evals/trees/2510.27688v1.outline.json --node "3.3.2" --serv
 uv run teacher outline paper.pdf --server http://127.0.0.1:8000       # a new tree; also takes a .md file
 ```
 
-`evals/cases.json` lists nodes of two papers, each with three to six facts its narration must state; `evals/trees/` holds the outline trees they come from, kept fixed so runs are comparable. `teacher eval` narrates each node with `--model`, and a fixed judge (`settings.JUDGE_MODEL`, Claude Sonnet 5.5, whatever model narrates) checks one fact per call: `stated`, `missing` or `contradicted`, with a quote from the narration that code checks is really there. A verdict whose quote is not in the narration counts as missing. The score varies from run to run, because each run writes new narrations, so judge a prompt change by a clear shift in the total, not by single facts. `--note-rounds 0` turns off the notes verifier, to measure what it adds. `--model claude-sonnet-5-5` narrates with Claude instead of the local model: a ceiling run, to see how much of the gap is the model and how much the prompts. Model calls in flight are capped at `PARALLEL` across all threads.
+`evals/cases.json` lists nodes of two papers, each with three to six facts its narration must state; `evals/trees/` holds the outline trees they come from, kept fixed so runs are comparable. `teacher eval` narrates each node with `--model`, then a fixed judge (`settings.JUDGE_MODEL`, whatever model narrates) checks one fact per call: `stated`, `missing` or `contradicted`, with a quote from the narration that code checks is really there, sentence by sentence. A verdict whose quote is not in the narration counts as missing. The judge is the local Qwen3-14B, on the narrator's own server, so evals need no API; `--judge claude-sonnet-5-5` judges with Claude instead. Scores from the two judges are not comparable.
+
+The judge was chosen with `teacher judge-bench`, which replays 883 verdicts Claude gave in earlier evals (`evals/judge-reference.jsonl`) through a candidate and reports agreement, Cohen's kappa (agreement beyond what the two verdict mixes give by chance) and per-verdict recall and precision, with every disagreement written out. The set is split by fact into `--split dev`, for tuning the judge prompt, and `--split test`, scored once at the end. On the test half Qwen3-14B agrees with Claude on 92% of facts, kappa 0.63, and is stricter: about four in ten of the facts it calls missing, Claude called stated. It shows no preference for its own narrations. Laya, Liquid's d1-2B (zero-shot) and Nemotron 3.5 Bolt E4B agreed less (kappa 0.23 to 0.55). The score varies from run to run, because each run writes new narrations, so judge a prompt change by a clear shift in the total, not by single facts. `--note-rounds 0` turns off the notes verifier, to measure what it adds. `--model claude-sonnet-5-5` narrates with Claude instead of the local model: a ceiling run, to see how much of the gap is the model and how much the prompts. Model calls in flight are capped at `PARALLEL` across all threads.
 
 ## Development
 
@@ -190,5 +192,5 @@ A test that needs a real model, the GPU, the network or real processes and signa
 - Wire the outline tree into `teacher run`: choose the method's branches, narrate their leaves in order, and give each parent a short spoken signpost of its parts.
 - Keep the appendix: cut only the reference list, so implementation details (such as I-JEPA's Appendix A) reach the outline.
 - Benchmark vLLM against TensorRT-LLM for the script model on this GPU: throughput, time per episode, and eval score. Check first that TensorRT-LLM runs a 4-bit AWQ model on consumer Blackwell (SM120); one report says only vLLM and SGLang do, through Marlin.
-- A steadier eval: run each case several times, and take a majority of three judge verdicts per fact.
+- A steadier eval: run each case several times (`--repeat`). A majority of three judge verdicts per fact did not agree with Claude better than one verdict.
 - Narration fixes the eval points at: symbols spelled out as words ("mu", "g phi"), and estimator details (weights, signs, sums) that the notes verifier lets through.
