@@ -28,6 +28,29 @@ Everything runs locally on one NVIDIA GPU (developed on an RTX 5070 Ti, 16 GB), 
    - **How it works**, so that the listener could implement it. The source is split at its headings into sections ([semchunk](https://github.com/isaacus-dev/semchunk) splits any over `--chunk` tokens); a note-taker summarises each, and a planner (thinking on) outlines the method as a glossary of plain names and two to seven components, each naming the sections it draws on. For each component, a detailer (thinking on) rewrites its inputs, steps and outputs from the full text of those sections, and one part is written from it. Each part is checked by a round trip: a listener agent writes pseudocode from the narration alone, and a checker (thinking on) compares it with the component and the source; any word with a digit or symbol in it is also a problem, found by a regex. A part with problems is rewritten once.
 3. **Speak**: [Qwen3-TTS](https://huggingface.co/Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice) (1.7B, Apache-2.0) on a [vLLM-Omni](https://github.com/vllm-project/vllm-omni) server reads the script, a batch of paragraphs per request, in a style set by `prompts/voice.md`.
 
+### Models and agents
+
+Every model, where it runs, and every agent that calls it. **Thinking** agents run with the model's reasoning on (Qwen3's thinking mode, or Claude at effort high); **writing** agents run with it off (Claude at effort low). Agents with a typed output use JSON-schema structured output.
+
+![Models and agents: what runs where, the teacher run flow, and the outline tree](docs/pipeline.svg)
+
+The diagram is drawn in [Excalidraw](https://excalidraw.com): `docs/pipeline.svg` has the scene embedded, so it opens for editing in Excalidraw or its VS Code extension, and `docs/pipeline.excalidraw` is the same scene as plain JSON.
+
+| Agent | Prompt | Mode | Output |
+|---|---|---|---|
+| Abstract reader | `episode/abstract` | writing | `Abstract` |
+| Contributions writer | `episode/contributions` | writing | `Contributions` |
+| Section notes | `plan/section_notes` | writing | text |
+| Planner | `plan/planner` | thinking | `Method` |
+| Detailer | `plan/detailer` | thinking | `Detail` |
+| Splitter | `tree/splitter` | thinking | `Split` |
+| Note-taker | `tree/note_taker` | writing | `Notes` |
+| Notes verifier | `tree/notes_verifier` | thinking | `Problems` |
+| Writer | `part/writer` | writing | text |
+| Listener | `part/listener` | writing | `Reconstruction` |
+| Checker | `part/checker` | thinking | `Problems` |
+| Judge | `eval/judge` | thinking, always Claude | `Verdict` |
+
 ### The outline tree (in progress)
 
 `teacher run` plans the method from short notes, which loses things. Its replacement, not yet wired into `run`, breaks the source down the way you would by hand:
@@ -153,5 +176,6 @@ The tests that convert the CALM paper load MinerU on the GPU, so stop `teacher s
 
 - Wire the outline tree into `teacher run`: choose the method's branches, narrate their leaves in order, and give each parent a short spoken signpost of its parts.
 - Keep the appendix: cut only the reference list, so implementation details (such as I-JEPA's Appendix A) reach the outline.
+- Benchmark vLLM against TensorRT-LLM for the script model on this GPU: throughput, time per episode, and eval score. Check first that TensorRT-LLM runs a 4-bit AWQ model on consumer Blackwell (SM120); one report says only vLLM and SGLang do, through Marlin.
 - A steadier eval: run each case several times, and take a majority of three judge verdicts per fact.
 - Narration fixes the eval points at: symbols spelled out as words ("mu", "g phi"), and estimator details (weights, signs, sums) that the notes verifier lets through.
