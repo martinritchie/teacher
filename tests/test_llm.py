@@ -95,7 +95,7 @@ def test_independent_calls_run_in_parallel_in_order(llm, tmp_path, monkeypatch):
         "Loss",
         "Distance",
     ]
-    assert re.search(r"total +6/6", output) and len(llm.of("judge")) == 6
+    assert re.search(r"total +6/6", output) and len(llm.of("judge")) == 12
     trace = (
         (tmp_path / next(p.name for p in tmp_path.glob("*.trace.jsonl")))
         .read_text()

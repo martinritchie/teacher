@@ -17,7 +17,7 @@ def test_a_verdict_whose_quote_is_not_in_the_narration_counts_as_missing(llm, tm
     (tmp_path / "cases.json").write_text(json.dumps(cases))
     llm.quote = "Words the narration never says."
     output = cli("eval", tmp_path / "cases.json", "--note-rounds", 0, "--out", tmp_path)
-    assert re.search(r"Encoder +0/1 +1 +0 +1", output)
+    assert re.search(r"Encoder +0/1 +0.0 +0 +0 +1 +0 +1", output)
     assert (
         "judged stated, but the quote is not in the narration"
         in next(tmp_path.glob("*.md")).read_text()

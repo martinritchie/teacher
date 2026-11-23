@@ -90,8 +90,11 @@ def component(
     )
 
 
-def write_part(brief: Brief, parts: list[str], llm: Model) -> str:
-    """The part for `brief`, continuing from `parts`, the parts the listener has heard so far."""
+def write_part(
+    brief: Brief, parts: list[str], llm: Model, log: list | None = None
+) -> str:
+    """The part for `brief`, continuing from `parts`, the parts the listener has heard so far. With `log`, each
+    checked draft is added to it with its problems, split into the checker's and the symbol check's."""
     values = dict(brief) | {"previous": _previous(parts)}
 
     def check(part: str) -> list[str]:
@@ -106,7 +109,10 @@ def write_part(brief: Brief, parts: list[str], llm: Model) -> str:
             pseudocode=pseudocode,
             **values,
         )
-        return unspoken(part) + verdict.problems
+        symbols = unspoken(part)
+        if log is not None:
+            log.append({"draft": part, "checker": verdict.problems, "symbols": symbols})
+        return symbols + verdict.problems
 
     return ask_until(_writer, llm, check, **values).strip()
 

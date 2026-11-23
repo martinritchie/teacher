@@ -59,53 +59,89 @@ def evaluate(
         claude(
             judge_model
         )  # first, so a missing key stops the run before any narration
-    start_trace(out / f"{stamp}.trace.jsonl")
+    trace = out / f"{stamp}.trace.jsonl"
+    start_trace(trace)
+    work = todo * repeat
     with serve_script_model(model, out / "script-model.log", server) as llm:
-        narrations = parallel(
-            lambda case: _narrate(case, llm, note_rounds), todo * repeat
-        )
+        narrated = parallel(lambda case: _narrate(case, llm, note_rounds), work)
+        # the final narration, and the same parts as first drafted, judged on the same facts
+        texts = [n for n, _ in narrated] + [
+            "\n\n".join(d["draft"] for d in log) for _, log in narrated
+        ]
         if judge_model == model:
-            judged = _judge_all(todo * repeat, narrations, llm)
+            judged = _judge_all(work * 2, texts, llm)
     if judge_model != model:
         with serve_script_model(judge_model, out / "judge-model.log") as judge_llm:
-            judged = _judge_all(todo * repeat, narrations, judge_llm)
-    runs = list(zip(narrations, judged))
+            judged = _judge_all(work * 2, texts, judge_llm)
+    runs = [(n, log, final, draft) for (n, log), final, draft in zip(narrated, judged[: len(work)], judged[len(work) :])]  # fmt: skip
     by_case = [
         runs[i :: len(todo)] for i in range(len(todo))
     ]  # each case's runs, in order
+    stated = lambda verdicts: sum(v[0] == "stated" for v in verdicts)  # noqa: E731
     table = [
         f"narrated by {model}, judged by {judge_model}, {repeat} run(s) in {time.monotonic() - began:.0f}s"
     ]
-    table.append(f"{'node':40} stated  missing  contra  unverified  symbols  words")
+    table.append(
+        f"{'node':34} stated  draft  +  -  missing  contra  unverified  rewritten  checker  symbols  words  /100w"
+    )
     for case, results in zip(todo, by_case):
-        verdicts = [j for _, judged in results for j in judged]
+        verdicts = [v for r in results for v in r[2]]
         count = lambda v: sum(j[0] == v for j in verdicts)  # noqa: E731
-        stated = " ".join(
-            f"{sum(j[0] == 'stated' for j in judged)}/{len(judged)}"
-            for _, judged in results
+        finals = " ".join(f"{stated(r[2])}/{len(r[2])}" for r in results)
+        draft = sum(stated(r[3]) for r in results) / repeat
+        gained = sum(
+            f[0] == "stated" != d[0] for r in results for f, d in zip(r[2], r[3])
         )
-        words = sum(len(narration.split()) for narration, _ in results) // repeat
-        symbols = sum(len(_symbols(narration)) for narration, _ in results)
-        table.append(f"{case['node'][:40]:40} {stated:>7} {count('missing'):>6} {count('contradicted'):>7} {sum(bool(j[2]) for j in verdicts):>11} {symbols:>8} {words:>6}")  # fmt: skip
+        lost = sum(
+            d[0] == "stated" != f[0] for r in results for f, d in zip(r[2], r[3])
+        )
+        logs = [d for r in results for d in r[1]]
+        rewritten = (
+            f"{sum(bool(d['checker'] or d['symbols']) for d in logs)}/{len(logs)}"
+        )
+        words = sum(len(r[0].split()) for r in results) / repeat
+        density = 100 * sum(stated(r[2]) for r in results) / max(repeat * words, 1)
+        table.append(f"{case['node'][:34]:34} {finals:>6} {draft:>6.1f} {gained:>2} {lost:>2} {count('missing'):>8} {count('contradicted'):>7} {sum(bool(j[2]) for j in verdicts):>11} {rewritten:>10} {sum(len(d['checker']) for d in logs):>8} "
+                     f"{sum(len(d['symbols']) for d in logs):>8} {words:>6.0f} {density:>6.2f}")  # fmt: skip
     totals = [
-        sum(sum(j[0] == "stated" for j in by_case[c][r][1]) for c in range(len(todo)))
-        for r in range(repeat)
+        sum(stated(by_case[c][r][2]) for c in range(len(todo))) for r in range(repeat)
     ]
+    drafts = sum(stated(r[3]) for r in runs) / repeat
     of = sum(len(c["facts"]) for c in todo)
     mean = f"  mean {sum(totals) / repeat:.1f}" if repeat > 1 else ""
-    table.append(f"{'total':40} {' '.join(f'{t}/{of}' for t in totals):>7}{mean}")
+    table.append(
+        f"{'total':34} {' '.join(f'{t}/{of}' for t in totals):>6}{mean}  drafts {drafts:.1f}"
+    )
+    table += ["", *_costs(trace)]
     report = ["```", *table, "```"]
     for case, results in zip(todo, by_case):
-        for r, (narration, judged) in enumerate(results, start=1):
+        for r, (narration, log, final, draft) in enumerate(results, start=1):
             run = f" (run {r})" if repeat > 1 else ""
-            report += [f"## {case['node']}{run}", narration, *(f"- **{v}**: {fact} — _{quote}_{' **(' + flag + ')**' if flag else ''}" for fact, (v, quote, flag) in zip(case["facts"], judged)), f"Symbols: {', '.join(_symbols(narration)) or 'none'}"]  # fmt: skip
+            report += [f"## {case['node']}{run}", narration, *(f"- **{v}**: {fact} — _{quote}_{' **(' + flag + ')**' if flag else ''}{f' (draft: {d[0]})' if d[0] != v else ''}" for fact, (v, quote, flag), d in zip(case["facts"], final, draft)),
+                       *(f"Checker, part {k}: " + "; ".join(d["checker"] + d["symbols"]) for k, d in enumerate(log, start=1) if d["checker"] or d["symbols"]), f"Symbols: {', '.join(_symbols(narration)) or 'none'}"]  # fmt: skip
     (out / f"{stamp}.md").write_text("\n\n".join(report) + "\n")
     typer.echo("\n".join(table) + f"\n\nDetails in {out / stamp}.md")
 
 
-def _narrate(case: dict, llm: Model, rounds: int) -> str:
+def _narrate(case: dict, llm: Model, rounds: int) -> tuple[str, list[dict]]:
+    """The node's narration, and each part's first draft with the problems the check found in it."""
     node = find_node(load_tree(Path(case["tree"])), case["node"])
-    return "\n\n".join(narrate(node, llm, rounds=rounds))
+    log: list[dict] = []
+    return "\n\n".join(narrate(node, llm, rounds=rounds, log=log)), log
+
+
+def _costs(trace: Path) -> list[str]:
+    """Calls, seconds and output tokens per agent, from the trace: what each round of the loop costs."""
+    calls = [
+        json.loads(line) for line in trace.read_text().splitlines() if '"call"' in line
+    ]
+    rows = [f"{'agent':24} calls  seconds  output tokens"]
+    for name in dict.fromkeys(c["call"] for c in calls):
+        mine = [c for c in calls if c["call"] == name]
+        rows.append(
+            f"{name:24} {len(mine):5} {sum(c['seconds'] for c in mine):8.0f} {sum(c.get('output_tokens', 0) for c in mine):14}"
+        )
+    return rows
 
 
 def _judge_all(

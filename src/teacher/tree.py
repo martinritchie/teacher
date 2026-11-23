@@ -88,7 +88,11 @@ def find_node(tree: list[Node], title: str) -> Node:
 
 
 def narrate(
-    node: Node, llm: Model, heard: str = "", rounds: int = NOTE_ROUNDS
+    node: Node,
+    llm: Model,
+    heard: str = "",
+    rounds: int = NOTE_ROUNDS,
+    log: list | None = None,
 ) -> list[str]:
     """One checked spoken part per leaf under `node`, in order, and one for any parent whose own text, before its
     first child, is more than a heading or a line. Notes for all parts are taken at once; parts are written in
@@ -106,7 +110,7 @@ def narrate(
             words=words,
             heard=heard,
         )
-        parts.append(write_part(brief, parts, llm))
+        parts.append(write_part(brief, parts, llm, log))
     return parts
 
 
