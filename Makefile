@@ -1,4 +1,4 @@
-.PHONY: format lint fix check help install reinstall clean test
+.PHONY: format lint fix check help install reinstall clean test test-functional test-all coverage
 
 help:
 	@echo "Teacher - ML papers to podcast-style audio, with local models"
@@ -10,7 +10,10 @@ help:
 	@echo "  make format      Format code with ruff"
 	@echo "  make lint        Check code quality"
 	@echo "  make check       Format and lint"
-	@echo "  make test        Run the test suite"
+	@echo "  make test             Unit tests: under 2 seconds, offline, no GPU"
+	@echo "  make test-functional  Functional tests: real MinerU, Qwen3-TTS, tokenizer and processes (minutes, GPU)"
+	@echo "  make test-all         Both"
+	@echo "  make coverage         Unit tests with a coverage report (terminal, and htmlcov/index.html)"
 	@echo "  make help        Show this help message"
 
 install:
@@ -23,7 +26,7 @@ reinstall:
 clean:
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 	find . -type f -name "*.pyc" -delete 2>/dev/null || true
-	rm -rf .ruff_cache build dist *.egg-info 2>/dev/null || true
+	rm -rf .ruff_cache build dist *.egg-info .coverage htmlcov 2>/dev/null || true
 
 format:
 	uv run ruff format .
@@ -36,3 +39,12 @@ check: format lint
 
 test:
 	uv run pytest
+
+test-functional:
+	uv run pytest -m functional
+
+test-all:
+	uv run pytest -m ""
+
+coverage:
+	uv run pytest --cov=teacher --cov-report=term-missing --cov-report=html

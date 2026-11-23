@@ -135,11 +135,14 @@ def _node(title: str, text: str, path: list[str], llm: Model) -> Node:
     else:
         empty = Split(subsections=[])
         split = ask(_splitter, llm, empty, path=[*path, title], text=text)
-        cuts = [(s.title, _find(text, s.starts_with)) for s in split.subsections]
-    cuts = [(t, at) for t, at in cuts if at is not None and t.lower() != title.lower()]
-    cuts = [
-        c for i, c in enumerate(cuts) if not i or c[1] > cuts[i - 1][1]
-    ]  # in order, no overlaps
+        cuts, after = (
+            [],
+            0,
+        )  # each subsection is looked for after the one before, so cuts never overlap
+        for sub in split.subsections:
+            if (at := _find(text, sub.starts_with, after)) is not None:
+                cuts, after = [*cuts, (sub.title, at)], at + 1
+    cuts = [(t, at) for t, at in cuts if t.lower() != title.lower()]
     if len(cuts) < 2:
         return Node(title=title, text=text)
     ends = [at for _, at in cuts[1:]] + [len(text)]
@@ -172,12 +175,14 @@ def _title(text: str) -> str:
     return text.strip().splitlines()[0].lstrip("# ").strip() if text.strip() else ""
 
 
-def _find(text: str, words: str) -> int | None:
-    """Where the quoted opening words start, ignoring spacing; snapped to the start of a heading line."""
+def _find(text: str, words: str, after: int = 0) -> int | None:
+    """Where the quoted opening words first start at or after `after`, ignoring spacing; snapped to the start of a
+    heading line."""
     for n in (8, 4):
         pattern = r"\s+".join(map(re.escape, words.lstrip("# ").split()[:n]))
-        match = pattern and re.search(pattern, text)
+        match = pattern and re.compile(pattern).search(text, after)
         if match:
             line = text.rfind("\n", 0, match.start()) + 1
-            return line if not text[line : match.start()].strip("# ") else match.start()
+            heading = line >= after and not text[line : match.start()].strip("# ")
+            return line if heading else match.start()
     return None

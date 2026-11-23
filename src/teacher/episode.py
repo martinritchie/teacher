@@ -6,13 +6,12 @@
 """
 
 import re
-from pathlib import Path
 
 import semchunk
 from pydantic import BaseModel, Field
 from pydantic_ai.models import Model
 
-from teacher.llm import agent, ask, ask_until, parallel, start_trace
+from teacher.llm import agent, ask, ask_until, parallel
 from teacher.part import (
     MAX_PART_WORDS,
     MAX_SOURCE_CHARS,
@@ -22,7 +21,7 @@ from teacher.part import (
     Term,
     write_part,
 )
-from teacher.settings import WORDS_PER_MINUTE
+from teacher.settings import SCRIPT_MODEL, WORDS_PER_MINUTE
 from teacher.speech import unspoken
 
 MAX_SECTION_CHARS = 12000  # about 3k tokens of abstract, introduction or conclusion
@@ -65,7 +64,8 @@ class Method(BaseModel):
         description="Every quantity, module or procedure the method names. All later parts use these names only."
     )
     components: list[Component] = Field(
-        description="Two to seven, in the order someone implementing the method would build them."
+        min_length=1,
+        description="Two to seven, in the order someone implementing the method would build them.",
     )
     key_numbers: list[str] = Field(
         description="Only values a first implementation needs, each written in words with what it controls, e.g. 'four tokens per vector'."
@@ -86,26 +86,33 @@ def split_into_chunks(markdown: str, model: str, max_tokens: int) -> list[str]:
     for s in re.split(r"(?m)^(?=#)", markdown):
         heading_only = sections and "\n" not in sections[-1].strip()
         sections[-1:] = [sections[-1] + s] if heading_only else [*sections[-1:], s]
-    split = semchunk.chunkerify(model, max_tokens)
+    tokenizer = (
+        SCRIPT_MODEL if model.startswith("claude-") else model
+    )  # an API model has no local tokenizer
+    split = semchunk.chunkerify(tokenizer, max_tokens)
     return [c for s in sections if s.strip() for c in split(s.strip())]
 
 
-def write_episode(
-    markdown: str, chunks: list[str], llm: Model, minutes: int, trace: Path
-) -> str:
-    """The script; every call's prompt and output go to `trace`, for tuning the prompts."""
-    start_trace(trace)
-    abstract = _read_abstract(_section(markdown, "abstract"), llm)
-    contributions = ask_until(
-        _contributions_writer,
-        llm,
-        lambda c: unspoken(" ".join(c.spoken())),
-        heard=abstract,
-        introduction=_section(markdown, "introduction") or chunks[0],
-        conclusion=_section(markdown, "conclusions?"),
-    )
-    heard = "\n\n".join(filter(None, [abstract, *contributions.spoken()]))
-    notes = parallel(lambda c: ask(_section_notes, llm, chunk=c), chunks)
+def write_episode(markdown: str, chunks: list[str], llm: Model, minutes: int) -> str:
+    """The script; every call goes to the trace, if one is open (llm.start_trace). The section notes are written
+    while the abstract and contributions are, since they do not depend on what was heard."""
+
+    def opening() -> str:
+        abstract = _read_abstract(_section(markdown, "abstract"), llm)
+        contributions = ask_until(
+            _contributions_writer,
+            llm,
+            lambda c: unspoken(" ".join(c.spoken())),
+            heard=abstract,
+            introduction=_section(markdown, "introduction") or chunks[0],
+            conclusion=_section(markdown, "conclusions?"),
+        )
+        return "\n\n".join(filter(None, [abstract, *contributions.spoken()]))
+
+    def all_notes() -> list[str]:
+        return parallel(lambda c: ask(_section_notes, llm, chunk=c), chunks)
+
+    heard, notes = parallel(lambda job: job(), [opening, all_notes])
     headings = [_headings(c) for c in chunks]
     method = ask(_planner, llm, notes=notes, headings=headings, heard=heard)
     budget = minutes * WORDS_PER_MINUTE - len(heard.split())
@@ -131,14 +138,18 @@ def _read_abstract(abstract: str, llm: Model) -> str:
 def _how_it_works(
     method: Method, chunks: list[str], heard: str, budget: int, llm: Model
 ) -> list[str]:
-    """One checked part per component, its mechanism first rewritten from its sections. Word targets are
-    the planner's, shrunk to fit `budget` and capped."""
+    """One checked part per component, its mechanism first rewritten from its sections. The rewrites run at
+    once, as none depends on another or on a part; the parts are written in order, each continuing the last.
+    Word targets are the planner's, shrunk to fit `budget` and capped."""
     scale = min(1, max(budget, 0) / max(sum(c.words for c in method.components), 1))
-    parts: list[str] = []
-    for c in method.components:
-        source = _source(c.chunks, chunks)
+
+    def detailed(c: Component) -> Detail:
         fallback = Detail(**c.model_dump(include=set(Detail.model_fields)))
-        detail = ask(_detailer, llm, fallback, glossary=method.glossary, outline=method.components, component=c, source=source)  # fmt: skip
+        return ask(_detailer, llm, fallback, glossary=method.glossary, outline=method.components, component=c, source=_source(c.chunks, chunks))  # fmt: skip
+
+    parts: list[str] = []
+    for c, detail in zip(method.components, parallel(detailed, method.components)):
+        source = _source(c.chunks, chunks)
         brief = Brief(
             component=c.model_copy(update=detail.model_dump()),
             outline=method.components,

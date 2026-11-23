@@ -9,5 +9,9 @@
 <conclusion>
 {{ conclusion }}
 </conclusion>
-{% include "_shared/problems.md" %}
+{% if problems %}
+<draft>
+{{ draft.spoken() | join("\n\n") }}
+</draft>
+{% endif %}{% include "_shared/problems.md" %}
 Write the contributions part.

@@ -5,16 +5,18 @@ source (read and convert), episode (abstract, contributions, method), speech (TT
 Only one model holds the GPU at a time.
 """
 
+import time
 from pathlib import Path
 from typing import Annotated
 
 import typer
 
 from teacher.episode import split_into_chunks, write_episode
+from teacher.llm import record, stage, start_trace
 from teacher.servers import serve_script_model, serve_voice_model
 from teacher.settings import SCRIPT_MODEL, VOICE, VOICE_MODEL
 from teacher.source import read_source
-from teacher.speech import make_speakable, save, speak
+from teacher.speech import Voice, make_speakable, save, speak
 
 
 def run(
@@ -36,24 +38,35 @@ def run(
         True, help="Speak the script; --no-audio writes the script only"
     ),
 ):
-    """Turn a paper or blog post into <name>.md (script) and <name>.mp3 in --out."""
+    """Turn a paper or blog post into <name>.md (script) and <name>.mp3 in --out. <name>.trace.jsonl has every
+    model call (prompt, output, tokens, seconds), each server's startup time, and the time of each stage."""
     out.mkdir(parents=True, exist_ok=True)
 
+    start = time.monotonic()
     paper = read_source(source)
     chunks = split_into_chunks(paper.markdown, model, chunk)
+    start_trace(
+        out / f"{paper.name}.trace.jsonl"
+    )  # named after the source, so opened once it is read
+    record(stage="read", seconds=round(time.monotonic() - start, 1))
 
-    with serve_script_model(model, out / "script-model.log", server) as llm:
-        script = write_episode(
-            paper.markdown, chunks, llm, minutes, out / f"{paper.name}.trace.jsonl"
-        )
+    with (
+        stage("write"),
+        serve_script_model(model, out / "script-model.log", server) as llm,
+    ):
+        script = write_episode(paper.markdown, chunks, llm, minutes)
 
     paragraphs = make_speakable(script)
+    save(
+        out, paper.name, paragraphs
+    )  # before speech, so a failure there keeps the script
+    typer.echo(f"Wrote {out / paper.name}.md")
 
     if audio:
-        with serve_voice_model(VOICE_MODEL, out / "voice-model.log") as tts:
-            audio = speak(paragraphs, voice, tts)
-
-    save(out, paper.name, paragraphs, audio)
-    typer.echo(
-        f"Wrote {out / paper.name}.md{' and .mp3' if audio is not False else ''}"
-    )
+        with (
+            stage("speak"),
+            serve_voice_model(VOICE_MODEL, out / "voice-model.log") as tts,
+        ):
+            clips = speak(paragraphs, Voice(speaker=voice), tts)
+        save(out, paper.name, paragraphs, clips)
+        typer.echo(f"Wrote {out / paper.name}.mp3")

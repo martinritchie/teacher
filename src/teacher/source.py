@@ -6,6 +6,8 @@ import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 
+import typer
+
 
 @dataclass(frozen=True)
 class Paper:
@@ -16,9 +18,12 @@ class Paper:
 def read_source(source: str) -> Paper:
     """A PDF path, PDF URL, arXiv abs URL, blog post URL or Markdown file, as Markdown without the references."""
     if source.endswith(".md") and not _is_url(source):
-        return Paper(Path(source).stem, _cut_references(Path(source).read_text()))
-    data = _fetch(source)
-    markdown = _pdf_to_markdown(data) if _is_pdf(data) else _html_to_markdown(data)
+        markdown = Path(source).read_text()
+    else:
+        data = _fetch(source)
+        markdown = _pdf_to_markdown(data) if _is_pdf(data) else _html_to_markdown(data)
+    if not markdown.strip():
+        raise typer.BadParameter(f"No text found in {source}")
     return Paper(_name_from(source), _cut_references(markdown))
 
 

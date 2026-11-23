@@ -1,5 +1,9 @@
 <abstract>
 {{ abstract }}
 </abstract>
-{% include "_shared/problems.md" %}
+{% if problems %}
+<draft>
+{{ draft.text }}
+</draft>
+{% endif %}{% include "_shared/problems.md" %}
 Transcribe this abstract for the ear.

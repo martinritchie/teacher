@@ -29,6 +29,8 @@ papers
 # Tool caches
 .pytest_cache/
 .ruff_cache/
+.coverage
+htmlcov/
 
 # Outputs: scripts, audio, traces, logs, eval reports (see README, "Outputs")
 out/

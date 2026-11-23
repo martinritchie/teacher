@@ -30,8 +30,20 @@ environments = ["sys_platform == 'linux'"]
 [dependency-groups]
 dev = [
     "pytest>=9.0.3",
+    "pytest-cov>=7.1.0",
     "ruff>=0.14.4",
 ]
 
 [tool.pytest.ini_options]
-markers = ["slow: loads real models"]
+testpaths = ["tests"]
+addopts = ["--import-mode=importlib", "-m", "not functional"]  # importlib: pytest's recommendation for new projects. A later -m replaces this one.
+markers = ["functional: real models, GPU, network or processes; too slow for the unit tests, run by make test-functional"]
+
+[tool.coverage.run]
+source = ["teacher"]
+branch = true
+omit = ["*/teacher/testing.py"]  # helpers for the tests themselves
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false

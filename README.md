@@ -26,7 +26,36 @@ Everything runs locally on one NVIDIA GPU (developed on an RTX 5070 Ti, 16 GB), 
    - **Abstract**: the text under the abstract heading, transcribed for the ear: symbols, numbers and acronyms in spoken form, nothing else changed. A transcription that keeps under 80% of the original words, or keeps symbols, is made again.
    - **Contributions**: from the abstract, introduction and conclusion, each contribution in plain English (the problem, what was done before, what is new), for a listener who knows ML but not the subfield.
    - **How it works**, so that the listener could implement it. The source is split at its headings into sections ([semchunk](https://github.com/isaacus-dev/semchunk) splits any over `--chunk` tokens); a note-taker summarises each, and a planner (thinking on) outlines the method as a glossary of plain names and two to seven components, each naming the sections it draws on. For each component, a detailer (thinking on) rewrites its inputs, steps and outputs from the full text of those sections, and one part is written from it. Each part is checked by a round trip: a listener agent writes pseudocode from the narration alone, and a checker (thinking on) compares it with the component and the source; any word with a digit or symbol in it is also a problem, found by a regex. A part with problems is rewritten once.
-3. **Speak**: [Qwen3-TTS](https://huggingface.co/Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice) (1.7B, Apache-2.0) on a [vLLM-Omni](https://github.com/vllm-project/vllm-omni) server reads the script, a batch of paragraphs per request, in a style set by `prompts/voice.md`.
+3. **Speak**: [Qwen3-TTS](https://huggingface.co/Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice) (1.7B, Apache-2.0) on a [vLLM-Omni](https://github.com/vllm-project/vllm-omni) server reads the script, a batch of paragraphs per request, with the model's own delivery: no style instruction, since one made the voice and tone drift between paragraphs (`teacher speak --style` sends `prompts/voice.md`).
+
+### Models and agents
+
+Every model, where it runs, and every agent that calls it. **Thinking** agents run with the model's reasoning on (Qwen3's thinking mode, or Claude at effort high); **writing** agents run with it off (Claude at effort low). Agents with a typed output use JSON-schema structured output.
+
+What runs where: the teacher CLI holds every agent, and each model runs on the one GPU in turn, or on the Anthropic API for evals.
+
+![teacher: what runs where (C4 container view)](docs/containers.svg)
+
+Which model does what during `teacher run`, in order. Blue calls run with thinking off, orange with it on.
+
+![teacher run: which model does what, in order](docs/run.svg)
+
+Both diagrams are drawn in [Excalidraw](https://excalidraw.com). Each SVG in `docs/` has its scene embedded, so it opens for editing in Excalidraw or its VS Code extension, and the `.excalidraw` file beside it is the same scene as plain JSON.
+
+| Agent | Prompt | Mode | Output |
+|---|---|---|---|
+| Abstract reader | `episode/abstract` | writing | `Abstract` |
+| Contributions writer | `episode/contributions` | writing | `Contributions` |
+| Section notes | `plan/section_notes` | writing | text |
+| Planner | `plan/planner` | thinking | `Method` |
+| Detailer | `plan/detailer` | thinking | `Detail` |
+| Splitter | `tree/splitter` | thinking | `Split` |
+| Note-taker | `tree/note_taker` | writing | `Notes` |
+| Notes verifier | `tree/notes_verifier` | thinking | `Problems` |
+| Writer | `part/writer` | writing | text |
+| Listener | `part/listener` | writing | `Reconstruction` |
+| Checker | `part/checker` | thinking | `Problems` |
+| Judge | `eval/judge` | thinking, always Claude | `Verdict` |
 
 ### The outline tree (in progress)
 
@@ -66,7 +95,7 @@ Everything the models see is in `src/teacher/prompts/`, as [Jinja2](https://jinj
 | `tree/` | `splitter`, `note_taker`, `notes_verifier` | `outline`, `write`, `eval` |
 | `part/` | `writer`, `listener`, `checker` | `run`, `write`, `eval` |
 | `eval/` | `judge` | `eval` |
-| `voice.md` | the narrator's voice, for TTS | `run` |
+| `voice.md` | a speaking-style instruction for TTS, off by default | `speak --style` |
 
 ## Usage
 
@@ -92,6 +121,7 @@ uv run teacher run paper.pdf --no-audio                             # script onl
 | Variable | Value | Why |
 |---|---|---|
 | `VLLM_USE_FLASHINFER_SAMPLER` | `0` | FlashInfer compiles with the system `nvcc`, and Blackwell GPUs need CUDA ≥ 12.9 |
+| `CUDA_CACHE_MAXSIZE` | 4 GiB | The driver's cache of kernels compiled for this GPU. Our models need about 1.4 GB; at the default 1 GiB, kernels are evicted and recompiled, and a vLLM start stalls up to a minute in CUDA-graph capture |
 | `MINERU_PROCESSING_WINDOW_SIZE` | `8` | Pages held in RAM at once |
 | `TORCHINDUCTOR_COMPILE_THREADS` | `1` | Keeps the vLLM compile step's RAM down |
 | `MINERU_TELEMETRY_DISABLED` | `1` | MinerU sends usage telemetry by default |
@@ -109,7 +139,7 @@ Everything a command writes goes under `out/`, which git ignores:
 | Path | Written by | Contents |
 |---|---|---|
 | `out/run/<name>.md`, `.mp3` | `run` | The script and the audio |
-| `out/<command>/<name>.trace.jsonl` | every command | Every model call, one JSON line each: the agent (such as `part/writer`), the message, the reply, and any error. The first place to look when a part comes out wrong |
+| `out/<command>/<name>.trace.jsonl` | every command | Every model call, one JSON line each: the agent (such as `part/writer`), the model, the message, the reply, any error, its seconds, its input and output tokens, and why each model request ended (`finish_reasons`, such as `length` at the token cap). A call that needed more than one request also keeps every request and reply (`messages`), the failed attempts' reasoning included. Also each server's startup seconds and, for `run`, the seconds of each stage (read, write, speak), for benchmarking. The first place to look when a part comes out wrong |
 | `out/outline/<name>.outline.md`, `.json` | `outline` | The nested headings; the tree with each node's text |
 | `out/write/<name>.<node>.md` | `write` | The narration of one node |
 | `out/eval/<time>.md` | `eval` | The score table, each narration, and each fact's verdict with the judge's quote |
@@ -142,16 +172,23 @@ uv run teacher outline paper.pdf --server http://127.0.0.1:8000       # a new tr
 ## Development
 
 ```bash
-uv run pytest -m "not slow"  # script model (a pydantic-ai FunctionModel) and TTS stubbed; real MinerU runs once per session
-make test                    # also the slow test, which runs real Qwen3-TTS
-make check                   # ruff format and lint
+make test             # unit tests: under 2 seconds, offline, no GPU
+make test-functional  # functional tests: real MinerU, Qwen3-TTS, tokenizer and server processes; minutes, on the GPU
+make test-all         # both
+make coverage         # unit tests with a coverage report: missing lines in the terminal, and htmlcov/index.html
+make check            # ruff format and lint
 ```
 
-The tests that convert the CALM paper load MinerU on the GPU, so stop `teacher serve` first (`pkill -f "teacher serve"`); the others need no GPU.
+Unit tests are for feedback on every change: plain `uv run pytest` runs only them. They run in airplane mode: a socket to anything but loopback fails the test. The script model is a pydantic-ai FunctionModel whose replies follow each agent's phase, speech returns silence, tokens are counted as words, and the CALM PDF reads as `tests/data/calm-short.md`, a short version of MinerU's Markdown of it (`tests/data/calm.md`). Tests that only read what a default run did share one run (the `episode_run` fixture), since each stub call costs about 3 ms of pydantic-ai.
+
+A test that needs a real model, the GPU, the network or real processes and signals is marked `@pytest.mark.functional`. One of them checks that MinerU still converts the PDF to `tests/data/calm.md`'s headings; if MinerU's output changes, save the new output there. Stop `teacher serve` before `make test-functional` (`pkill -f "teacher serve"`), since its tests load models on the GPU.
+
+`tests/` mirrors `src/teacher/`: `tests/test_tree.py` specifies `tree.py`, `tests/commands/test_run.py` specifies `commands/run.py`, and so on. Shared fixtures are in `tests/conftest.py`. Helpers that tests call directly are in `src/teacher/testing.py`: tests run in pytest's `importlib` import mode, where test modules cannot import each other, and pytest's docs recommend keeping such utilities with the library code. Coverage leaves that file out.
 
 ## Development plan
 
 - Wire the outline tree into `teacher run`: choose the method's branches, narrate their leaves in order, and give each parent a short spoken signpost of its parts.
 - Keep the appendix: cut only the reference list, so implementation details (such as I-JEPA's Appendix A) reach the outline.
+- Benchmark vLLM against TensorRT-LLM for the script model on this GPU: throughput, time per episode, and eval score. Check first that TensorRT-LLM runs a 4-bit AWQ model on consumer Blackwell (SM120); one report says only vLLM and SGLang do, through Marlin.
 - A steadier eval: run each case several times, and take a majority of three judge verdicts per fact.
 - Narration fixes the eval points at: symbols spelled out as words ("mu", "g phi"), and estimator details (weights, signs, sums) that the notes verifier lets through.
