@@ -16,7 +16,7 @@ def test_a_verdict_whose_quote_is_not_in_the_narration_counts_as_missing(llm, tm
     cases = [{"tree": str(tmp_path / "x.outline.json"), "node": "Encoder", "facts": ["It maps tokens."]}]  # fmt: skip
     (tmp_path / "cases.json").write_text(json.dumps(cases))
     llm.quote = "Words the narration never says."
-    output = cli("eval", tmp_path / "cases.json", "--out", tmp_path)
+    output = cli("eval", tmp_path / "cases.json", "--note-rounds", 0, "--out", tmp_path)
     assert re.search(r"Encoder +0/1 +1 +0 +1", output)
     assert (
         "judged stated, but the quote is not in the narration"
@@ -25,7 +25,8 @@ def test_a_verdict_whose_quote_is_not_in_the_narration_counts_as_missing(llm, tm
     llm.clear()
     llm.quote = "part ONE"  # case and edge punctuation do not matter
     assert re.search(
-        r"Encoder +1/1", cli("eval", tmp_path / "cases.json", "--out", tmp_path)
+        r"Encoder +1/1",
+        cli("eval", tmp_path / "cases.json", "--note-rounds", 0, "--out", tmp_path),
     )
 
 

@@ -145,7 +145,10 @@ def _llm(monkeypatch):
 
     @contextmanager
     def no_server(cmd, log, port=None):
-        calls.started, calls.server = calls.started + 1, cmd
+        calls.started += 1
+        calls.server = (
+            cmd if cmd[0] == "vllm" else calls.server
+        )  # the script model's, not the voice's
         yield "http://server"
 
     def stub(

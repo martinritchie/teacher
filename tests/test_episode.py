@@ -38,7 +38,7 @@ def test_chunk_sets_the_source_tokens_for_each_call(
     llm, tts, tmp_path, unit, episode_run
 ):
     """--chunk is the quality limit, counted with the model's tokenizer (here, a word count). Sections over it are split, so a smaller value gives more chunks than the default."""
-    run(PDF, "--out", tmp_path, "--chunk", 150)
+    run(PDF, "--out", tmp_path, "--no-audio", "--chunk", 150)
     small = llm.of("notes")
     assert all(len(chunk(c).split()) <= 150 for c in small) and unit == [SMALL_MODEL]
     assert 1 < len(episode_run.llm.of("notes")) < len(small)
@@ -104,7 +104,9 @@ def test_abstract_that_strays_is_transcribed_again(llm, tts, tmp_path):
 
 def test_abstract_with_symbols_is_transcribed_again(llm, tts, tmp_path):
     """Words with digits or symbols left in the transcription go back as a problem."""
-    run(PDF, "--out", tmp_path)  # the stub echoes the abstract, which says 99.9%
+    run(
+        PDF, "--out", tmp_path, "--no-audio"
+    )  # the stub echoes the abstract, which says 99.9%
     first, second = llm.of("abstract")
     assert "<problems>" not in first.prompt and "<draft>" not in first.prompt
     assert "99.9%" in block(second.prompt, "problems")
@@ -144,7 +146,7 @@ def test_outline_sees_every_note_and_what_was_heard(episode_run):
 def test_each_part_gets_its_component_and_its_chunks(llm, tts, tmp_path):
     """Each part gets the sections its component names, in that order, invented numbers dropped."""
     llm.components = [component(1, [3, 1, 2]), component(2, [99, 0, 3])]
-    run(PDF, "--out", tmp_path)
+    run(PDF, "--out", tmp_path, "--no-audio")
     notes, parts = llm.of("notes"), llm.of("method")
     joined = "\n\n".join(chunk(notes[k]) for k in (2, 0, 1))
     assert source_of(parts[0]) == joined
@@ -155,7 +157,7 @@ def test_each_part_gets_its_component_and_its_chunks(llm, tts, tmp_path):
 def test_each_component_is_detailed_from_its_sections(llm, tts, tmp_path):
     """Before the parts are written, every component's mechanism is rewritten from its sections, all at once; the writer and checker get the rewrite. Name, sections and words stay the outline's."""
     llm.components = [component(1, [3]), component(2, [2])]
-    run(PDF, "--out", tmp_path)
+    run(PDF, "--out", tmp_path, "--no-audio")
     notes, details, parts = llm.of("notes"), llm.of("detail"), llm.of("method")
     assert [source_of(d) for d in details] == [chunk(notes[2]), chunk(notes[1])]
     assert (
@@ -179,7 +181,7 @@ def test_a_detail_with_no_valid_answer_keeps_the_outline(llm, tts, tmp_path):
         "not a component",
         "still not a component",
     ]  # the reply and its retry
-    run(PDF, "--out", tmp_path)
+    run(PDF, "--out", tmp_path, "--no-audio")
     assert "1. Step 1." in llm.of("method")[0].prompt
 
 
@@ -189,7 +191,7 @@ def test_part_sources_stop_at_the_size_limit(llm, tts, tmp_path, monkeypatch):
         episode, "MAX_SOURCE_CHARS", 3000
     )  # the short paper is under the real limit
     llm.components = [component(1, list(range(1, 30)))]
-    run(PDF, "--out", tmp_path)
+    run(PDF, "--out", tmp_path, "--no-audio")
     source = source_of(llm.of("method")[0])
     assert source.startswith(chunk(llm.of("notes")[0])) and 1500 < len(source) <= 3000
 
@@ -197,7 +199,7 @@ def test_part_sources_stop_at_the_size_limit(llm, tts, tmp_path, monkeypatch):
 def test_word_targets_come_from_the_outline_capped(llm, tts, tmp_path):
     """Each part's word target is the outline's, capped at three hundred words; a long --minutes does not pad them."""
     llm.components = [component(1, [1], 100), component(2, [2], 500)]
-    run(PDF, "--out", tmp_path, "--minutes", 60)
+    run(PDF, "--out", tmp_path, "--no-audio", "--minutes", 60)
     assert targets(llm) == [100, 300]
 
 

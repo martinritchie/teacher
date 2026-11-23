@@ -21,7 +21,7 @@ def test_eval_scores_each_case_against_its_facts(llm, tmp_path):
              {"tree": str(tmp_path / "x.outline.json"), "node": "Loss", "facts": ["Two terms."]}]  # fmt: skip
     (tmp_path / "cases.json").write_text(json.dumps(cases))
     llm.verdict = "missing"
-    output = cli("eval", tmp_path / "cases.json", "--out", tmp_path)
+    output = cli("eval", tmp_path / "cases.json", "--note-rounds", 0, "--out", tmp_path)
     assert re.search(r"Encoder +0/2 +2 +0", output) and re.search(r"total +0/3", output)
     judged = {
         block(c.prompt, "fact"): block(c.prompt, "narration") for c in llm.of("judge")
@@ -36,19 +36,60 @@ def test_eval_runs_only_the_cases_asked_for(llm, tmp_path):
     (tmp_path / "x.outline.json").write_text(json.dumps(TREE))
     cases = [{"tree": str(tmp_path / "x.outline.json"), "node": n, "facts": ["A fact."]} for n in ("Encoder", "Loss")]  # fmt: skip
     (tmp_path / "cases.json").write_text(json.dumps(cases))
-    cli("eval", tmp_path / "cases.json", "--only", "loss", "--out", tmp_path)
+    cli(
+        "eval",
+        tmp_path / "cases.json",
+        "--only",
+        "loss",
+        "--note-rounds",
+        0,
+        "--out",
+        tmp_path,
+    )
     assert len(llm.of("judge")) == 1
 
 
 def test_eval_judges_with_the_fixed_judge_whatever_narrates(llm, tmp_path):
-    """The narration comes from --model; every judge call goes to settings.JUDGE_MODEL, and the report says which is which."""
+    """The narration comes from --model; every judge call goes to settings.JUDGE_MODEL, served after the narration
+    is done, and the report says which is which."""
     (tmp_path / "x.outline.json").write_text(json.dumps(TREE))
     cases = [{"tree": str(tmp_path / "x.outline.json"), "node": "Encoder", "facts": ["It maps tokens."]}]  # fmt: skip
     (tmp_path / "cases.json").write_text(json.dumps(cases))
-    output = cli("eval", tmp_path / "cases.json", "--out", tmp_path)
-    assert {c.model for c in llm.of("judge")} == {JUDGE_MODEL}
+    output = cli("eval", tmp_path / "cases.json", "--note-rounds", 0, "--out", tmp_path)
+    assert {c.model for c in llm.of("judge")} == {JUDGE_MODEL} and llm.started == 2
     assert {c.model for c in llm if c.phase != "judge"} == {SMALL_MODEL}
+    assert max(llm.index(c) for c in llm if c.phase != "judge") < llm.index(
+        llm.of("judge")[0]
+    )
     assert f"narrated by {SMALL_MODEL}, judged by {JUDGE_MODEL}" in output
+
+
+def test_a_judge_that_is_the_narrator_uses_its_server(llm, tmp_path):
+    """When --judge names the narrating model, the eval starts one server for both; Claude stays available."""
+    (tmp_path / "x.outline.json").write_text(json.dumps(TREE))
+    cases = [{"tree": str(tmp_path / "x.outline.json"), "node": "Encoder", "facts": ["It maps tokens."]}]  # fmt: skip
+    (tmp_path / "cases.json").write_text(json.dumps(cases))
+    cli(
+        "eval",
+        tmp_path / "cases.json",
+        "--note-rounds",
+        0,
+        "--out",
+        tmp_path,
+        "--judge",
+        SMALL_MODEL,
+    )
+    assert llm.started == 1 and {c.model for c in llm} == {SMALL_MODEL}
+    llm.clear()
+    cli(
+        "eval",
+        tmp_path / "cases.json",
+        "--out",
+        tmp_path,
+        "--judge",
+        "claude-sonnet-5-5",
+    )
+    assert {c.model for c in llm.of("judge")} == {"claude-sonnet-5-5"}
 
 
 def test_repeat_runs_every_case_several_times_at_once(llm, tmp_path):
@@ -56,7 +97,16 @@ def test_repeat_runs_every_case_several_times_at_once(llm, tmp_path):
     (tmp_path / "x.outline.json").write_text(json.dumps(TREE))
     cases = [{"tree": str(tmp_path / "x.outline.json"), "node": n, "facts": ["A.", "B."]} for n in ("Encoder", "Loss")]  # fmt: skip
     (tmp_path / "cases.json").write_text(json.dumps(cases))
-    output = cli("eval", tmp_path / "cases.json", "--out", tmp_path, "--repeat", 2)
+    output = cli(
+        "eval",
+        tmp_path / "cases.json",
+        "--note-rounds",
+        0,
+        "--out",
+        tmp_path,
+        "--repeat",
+        2,
+    )
     assert len(llm.of("judge")) == 2 * 2 * 2
     assert re.search(r"Encoder +2/2 2/2", output) and re.search(
         r"total +4/4 4/4  mean 4.0", output

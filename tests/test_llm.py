@@ -89,7 +89,7 @@ def test_independent_calls_run_in_parallel_in_order(llm, tmp_path, monkeypatch):
     (tmp_path / "x.outline.json").write_text(json.dumps(TREE))
     cases = [{"tree": str(tmp_path / "x.outline.json"), "node": n, "facts": [f"{n} fact {i}." for i in "ab"]} for n in ("Encoder", "Loss", "Distance term")]  # fmt: skip
     (tmp_path / "cases.json").write_text(json.dumps(cases))
-    output = cli("eval", tmp_path / "cases.json", "--out", tmp_path)
+    output = cli("eval", tmp_path / "cases.json", "--note-rounds", 0, "--out", tmp_path)
     assert [line.split()[0] for line in output.splitlines()[2:5]] == [
         "Encoder",
         "Loss",

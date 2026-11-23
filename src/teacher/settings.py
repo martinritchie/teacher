@@ -18,7 +18,10 @@ PAUSE_SECONDS = 0.6  # silence between paragraphs
 
 PARALLEL = 16  # threads per parallel() call; each model's `parallel` profile setting caps its calls in flight
 
-JUDGE_MODEL = "claude-sonnet-5-5"  # `teacher eval`'s judge: fixed, so scores stay comparable as the writer changes
+# `teacher eval`'s judge: fixed, so scores stay comparable as the writer changes. Chosen with `teacher judge-bench`
+# against 883 recorded Claude verdicts: Qwen3-14B agrees best of the local candidates (kappa about 0.7), shows no
+# preference for its own narrations, and judges on the narrator's own server. Claude remains possible with --judge.
+JUDGE_MODEL = SCRIPT_MODEL
 CLAUDE_KEY = (
     "CLAUDE_API_KEY"  # read from the environment, or from a line in the repo's .env
 )

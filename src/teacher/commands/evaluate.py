@@ -37,11 +37,16 @@ def evaluate(
         1,
         help="Runs of every case, all at once; the table shows each run's score and the mean",
     ),
+    judge_model: str = typer.Option(
+        JUDGE_MODEL,
+        "--judge",
+        help="Model that judges; keep it fixed so scores stay comparable. The narrator's server is reused when they match",
+    ),
     out: Path = typer.Option(
         Path("out/eval"), help="Output directory; each run gets a timestamped report"
     ),
 ):
-    """Narrate each case's node and judge it fact by fact with the fixed judge (settings.JUDGE_MODEL), whatever
+    """Narrate each case's node, then judge it fact by fact with the fixed judge (settings.JUDGE_MODEL), whatever
     model narrates; print a score table, with details in <out>/<time>.md."""
     todo = [
         c
@@ -50,19 +55,26 @@ def evaluate(
     ]
     out.mkdir(parents=True, exist_ok=True)
     stamp, began = time.strftime("%Y%m%d-%H%M%S"), time.monotonic()
-    judge_llm = claude(
-        JUDGE_MODEL
-    )  # first, so a missing key stops the run before any narration
+    if judge_model.startswith("claude-"):
+        claude(
+            judge_model
+        )  # first, so a missing key stops the run before any narration
+    start_trace(out / f"{stamp}.trace.jsonl")
     with serve_script_model(model, out / "script-model.log", server) as llm:
-        start_trace(out / f"{stamp}.trace.jsonl")
-        runs = parallel(
-            lambda case: _run_case(case, llm, judge_llm, note_rounds), todo * repeat
+        narrations = parallel(
+            lambda case: _narrate(case, llm, note_rounds), todo * repeat
         )
+        if judge_model == model:
+            judged = _judge_all(todo * repeat, narrations, llm)
+    if judge_model != model:
+        with serve_script_model(judge_model, out / "judge-model.log") as judge_llm:
+            judged = _judge_all(todo * repeat, narrations, judge_llm)
+    runs = list(zip(narrations, judged))
     by_case = [
         runs[i :: len(todo)] for i in range(len(todo))
     ]  # each case's runs, in order
     table = [
-        f"narrated by {model}, judged by {JUDGE_MODEL}, {repeat} run(s) in {time.monotonic() - began:.0f}s"
+        f"narrated by {model}, judged by {judge_model}, {repeat} run(s) in {time.monotonic() - began:.0f}s"
     ]
     table.append(f"{'node':40} stated  missing  contra  unverified  symbols  words")
     for case, results in zip(todo, by_case):
@@ -91,14 +103,20 @@ def evaluate(
     typer.echo("\n".join(table) + f"\n\nDetails in {out / stamp}.md")
 
 
-def _run_case(
-    case: dict, llm: Model, judge_llm: Model, rounds: int
-) -> tuple[str, list[tuple[str, str, str]]]:
+def _narrate(case: dict, llm: Model, rounds: int) -> str:
     node = find_node(load_tree(Path(case["tree"])), case["node"])
-    narration = "\n\n".join(narrate(node, llm, rounds=rounds))
-    return narration, parallel(
-        lambda fact: judge(fact, narration, judge_llm), case["facts"]
-    )
+    return "\n\n".join(narrate(node, llm, rounds=rounds))
+
+
+def _judge_all(
+    cases: list[dict], narrations: list[str], llm: Model
+) -> list[list[tuple[str, str, str]]]:
+    """Every fact of every case against its narration, all at once; one list of verdicts per case."""
+    pairs = [(i, fact) for i, case in enumerate(cases) for fact in case["facts"]]
+    verdicts = parallel(lambda p: judge(p[1], narrations[p[0]], llm), pairs)
+    return [
+        [v for (i, _), v in zip(pairs, verdicts) if i == k] for k in range(len(cases))
+    ]
 
 
 def _symbols(narration: str) -> list[str]:
