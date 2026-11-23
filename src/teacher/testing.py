@@ -26,7 +26,7 @@ SHORT_MARKDOWN = (
 SMALL_MODEL = "Qwen/Qwen3-0.6B"  # only its tokenizer is downloaded
 
 
-PHASES = {"# Abstract Reader": "abstract", "# Contributions Writer": "contributions", "# Notes Writer": "notes", "# Method Planner": "outline", "# Component Detailer": "detail", "# Method Writer": "method", "# Listener": "reconstruct", "# Method Checker": "check", "# Section Splitter": "split", "# Fact Judge": "judge", "# Leaf Note Taker": "leaf notes", "# Notes Verifier": "notes check"}  # fmt: skip
+PHASES = {"# Abstract Reader": "abstract", "# Contributions Writer": "contributions", "# Notes Writer": "notes", "# Method Planner": "outline", "# Component Detailer": "detail", "# Method Writer": "method", "# Listener": "reconstruct", "# Method Checker": "check", "# Section Splitter": "split", "# Fact Judge": "judge", "# Leaf Note Taker": "leaf notes", "# Notes Verifier": "notes check", "# Grounding Checker": "grounding"}  # fmt: skip
 
 
 DIGITS = "zero one two three four five six seven eight nine".split()
@@ -66,6 +66,9 @@ class Calls(list):
     error: Exception | None = None  # raised by every call when set
     components: list[dict] | None = None  # the outline's; default is one per chunk
     parts: list[str] = []  # replies to the method calls; default "Part k."
+    unsupported: list[
+        list[str]
+    ] = []  # the grounding checker's statements, in order; default none
     served: str = ""  # the model the script server was started with
     server: list = []  # the vLLM command it was started with
     settings: dict = {}  # model settings of each phase

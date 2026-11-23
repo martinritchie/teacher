@@ -111,7 +111,7 @@ def _llm(monkeypatch):
     calls = Calls()
     calls.verdicts, calls.abstracts, calls.parts, calls.contributions = [], [], [], []
     calls.details, calls.splits, calls.verdict, calls.started = [], {}, "stated", 0
-    calls.gaps, calls.quote = [], None
+    calls.gaps, calls.quote, calls.unsupported = [], None, []
     calls.settings, calls.components = {}, None
 
     def reply(messages, info: AgentInfo, model: str):
@@ -135,6 +135,7 @@ def _llm(monkeypatch):
             "judge": lambda: json.dumps({"verdict": calls.verdict, "quote": calls.quote if calls.quote is not None else block(prompt, "narration").split("\n")[0]}),
             "leaf notes": lambda: json.dumps({"notes": [f"Note {spelled(k)} a.", f"Note {spelled(k)} b."]}),
             "notes check": lambda: json.dumps({"problems": calls.gaps.pop(0) if calls.gaps else []}),
+            "grounding": lambda: json.dumps({"problems": calls.unsupported.pop(0) if calls.unsupported else []}),
             "split": lambda: json.dumps({"subsections": [{"title": t, "starts_with": w} for t, w in calls.splits.get(block(prompt, "path").split(" > ")[-1], calls.splits.get("*", []))]}),
             "detail": lambda: (lambda d: d if isinstance(d, str) else json.dumps(d))(calls.details.pop(0) if calls.details else {"purpose": f"Purpose {k}.", "inputs": "x", "steps": [f"Detailed step {k}."], "outputs": "y"}),
             "method": lambda: calls.parts.pop(0) if calls.parts else f"Part {spelled(k)}.",

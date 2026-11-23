@@ -59,10 +59,12 @@ def test_eval_judges_with_the_fixed_judge_whatever_narrates(llm, tmp_path):
     (tmp_path / "cases.json").write_text(json.dumps(cases))
     output = cli("eval", tmp_path / "cases.json", "--note-rounds", 0, "--out", tmp_path)
     assert {c.model for c in llm.of("judge")} == {JUDGE_MODEL} and llm.started == 2
-    assert {c.model for c in llm if c.phase != "judge"} == {SMALL_MODEL}
-    assert max(llm.index(c) for c in llm if c.phase != "judge") < llm.index(
-        llm.of("judge")[0]
-    )
+    assert {c.model for c in llm if c.phase not in ("judge", "grounding")} == {
+        SMALL_MODEL
+    }
+    assert max(
+        llm.index(c) for c in llm if c.phase not in ("judge", "grounding")
+    ) < llm.index(llm.of("judge")[0])
     assert f"narrated by {SMALL_MODEL}, judged by {JUDGE_MODEL}" in output
 
 
@@ -128,11 +130,14 @@ def test_eval_scores_the_first_drafts_and_reports_the_checks_and_their_cost(
     cases = [{"tree": str(tmp_path / "x.outline.json"), "node": "Encoder", "facts": ["It maps tokens."]}]  # fmt: skip
     (tmp_path / "cases.json").write_text(json.dumps(cases))
     llm.verdicts = [["The listener could not tell what is encoded."]]
+    llm.unsupported = [
+        ["The encoder is a convolutional network."]
+    ]  # in the final narration, none in the drafts
     output = cli("eval", tmp_path / "cases.json", "--note-rounds", 0, "--out", tmp_path)
     drafts = [block(c.prompt, "narration") for c in llm.of("judge")]
     assert drafts == ["Part two.", "Part one."]  # the rewrite, then the first draft
     assert (
-        re.search(r"Encoder +1/1 +1.0 +0 +0 +0 +0 +0 +1/1 +1 +0", output)
+        re.search(r"Encoder +1/1 +1.0 +0 +0 +0 +0 +0 +1.0 +0.0 +1/1 +1 +0", output)
         and "drafts 1.0" in output
     )
     assert re.search(r"part/checker +1 ", output) and re.search(
@@ -140,3 +145,11 @@ def test_eval_scores_the_first_drafts_and_reports_the_checks_and_their_cost(
     )
     report = next(tmp_path.glob("*.md")).read_text()
     assert "Checker, part 1: The listener could not tell what is encoded." in report
+    assert (
+        "Unsupported: The encoder is a convolutional network." in report
+        and "unsupported 1.0 (drafts 0.0)" in output
+    )
+    grounding = llm.of("grounding")[0].prompt
+    assert (
+        "The encoder maps tokens to vectors." in grounding
+    )  # the node's own text is the source

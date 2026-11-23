@@ -12,7 +12,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 from pydantic_ai.models import Model
 
-from teacher.llm import agent, ask
+from teacher.llm import Problems, agent, ask
 
 
 class Verdict(BaseModel):
@@ -23,6 +23,7 @@ class Verdict(BaseModel):
 
 
 _judge = agent("eval/judge", Verdict, thinks=True)
+_grounding = agent("eval/grounding", Problems, thinks=True)
 
 
 def judge(fact: str, narration: str, llm: Model) -> tuple[str, str, str]:
@@ -36,6 +37,13 @@ def judge(fact: str, narration: str, llm: Model) -> tuple[str, str, str]:
             f"judged {v.verdict}, but the quote is not in the narration",
         )
     return v.verdict, v.quote, ""
+
+
+def unsupported(narration: str, source: str, llm: Model) -> list[str]:
+    """Statements in the narration that the source does not support: errors no listed fact would catch."""
+    return ask(
+        _grounding, llm, Problems(problems=[]), source=source, narration=narration
+    ).problems
 
 
 def _quoted(quote: str, narration: str) -> bool:
