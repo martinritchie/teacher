@@ -17,6 +17,7 @@ import typer
 from pydantic_ai.exceptions import ModelHTTPError
 from pydantic_ai.models import Model
 
+from teacher.llm import record
 from teacher.settings import CLAUDE_KEY, profile
 
 
@@ -139,7 +140,9 @@ def vllm_server(cmd: list[str], log: Path, port: int | None = None) -> Iterator[
             start_new_session=True,  # its own process group, so its engine processes stop with it
         )
     try:
+        start = time.monotonic()
         _wait_until_ready(proc, url, log)
+        record(server=cmd[2], startup_seconds=round(time.monotonic() - start, 1))
         yield url
     finally:
         _stop(proc)

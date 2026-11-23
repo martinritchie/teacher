@@ -6,13 +6,12 @@
 """
 
 import re
-from pathlib import Path
 
 import semchunk
 from pydantic import BaseModel, Field
 from pydantic_ai.models import Model
 
-from teacher.llm import agent, ask, ask_until, parallel, start_trace
+from teacher.llm import agent, ask, ask_until, parallel
 from teacher.part import (
     MAX_PART_WORDS,
     MAX_SOURCE_CHARS,
@@ -94,11 +93,8 @@ def split_into_chunks(markdown: str, model: str, max_tokens: int) -> list[str]:
     return [c for s in sections if s.strip() for c in split(s.strip())]
 
 
-def write_episode(
-    markdown: str, chunks: list[str], llm: Model, minutes: int, trace: Path
-) -> str:
-    """The script; every call's prompt and output go to `trace`, for tuning the prompts."""
-    start_trace(trace)
+def write_episode(markdown: str, chunks: list[str], llm: Model, minutes: int) -> str:
+    """The script; every call goes to the trace, if one is open (llm.start_trace)."""
     abstract = _read_abstract(_section(markdown, "abstract"), llm)
     contributions = ask_until(
         _contributions_writer,

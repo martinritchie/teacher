@@ -10,6 +10,7 @@ import time
 import pytest
 from typer.testing import CliRunner
 
+import teacher.llm as llm_mod
 import teacher.servers as servers
 from teacher.cli import app
 from teacher.testing import (
@@ -88,3 +89,14 @@ def test_a_port_already_serving_a_model_is_refused(tmp_path):
                 fake_server(tmp_path), tmp_path / "second.log", port
             ):
                 pass
+
+
+@pytest.mark.functional  # a real process
+def test_a_server_records_its_startup_time_in_the_trace(tmp_path, monkeypatch):
+    """The time from starting a server to its first answer goes in the trace: an engine's startup is part of its cost."""
+    monkeypatch.setattr(llm_mod, "_trace", None)
+    llm_mod.start_trace(tmp_path / "t.trace.jsonl")
+    with servers.vllm_server(fake_server(tmp_path), tmp_path / "server.log"):
+        pass
+    line = json.loads((tmp_path / "t.trace.jsonl").read_text())
+    assert isinstance(line["startup_seconds"], float) and "server" in line

@@ -11,6 +11,7 @@ import threading
 import time
 from collections.abc import Callable, Iterable
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 from pathlib import Path
 
 import jinja2
@@ -31,7 +32,9 @@ class Problems(BaseModel):
 _templates = jinja2.Environment(
     loader=jinja2.FileSystemLoader(PROMPTS), undefined=jinja2.StrictUndefined
 )
-_trace: Path  # every call's prompt and output, one JSON line each
+_trace: Path | None = (
+    None  # every call's prompt, output and tokens, and each stage's time: one JSON line each
+)
 _trace_lock = threading.Lock()
 _thinks: dict[
     str, bool
@@ -54,7 +57,7 @@ def agent(name: str, output=str, thinks: bool = False) -> Agent:
 def ask(agent: Agent, llm: Model, fallback=None, **values):
     """One call, traced. With a `fallback`, a reply that is not valid output (e.g. thinking that ran out of
     tokens) gives the fallback instead of ending the run."""
-    prompt, error = _render(f"{agent.name}_task.md", **values), None
+    prompt, error, usage = _render(f"{agent.name}_task.md", **values), None, None
     family = profile(llm.model_name)
     settings = family["thinking" if _thinks[agent.name] else "writing"]
     slots = _slots.setdefault(
@@ -64,16 +67,16 @@ def ask(agent: Agent, llm: Model, fallback=None, **values):
         with slots:
             start = time.monotonic()
             call = agent.run(prompt, model=llm, model_settings=settings)
-            output = asyncio.run_coroutine_threadsafe(call, _loop).result().output
+            result = asyncio.run_coroutine_threadsafe(call, _loop).result()
+            output, usage = result.output, result.usage
     except UnexpectedModelBehavior as e:
         if fallback is None:
             raise
         output, error = fallback, str(e)
     saved = output.model_dump() if isinstance(output, BaseModel) else output
     seconds = round(time.monotonic() - start, 1)
-    line = {"call": agent.name, "model": llm.model_name, "seconds": seconds, "prompt": prompt, "output": saved}  # fmt: skip
-    with _trace_lock, _trace.open("a") as f:
-        f.write(json.dumps(line | ({"error": error} if error else {})) + "\n")
+    tokens = {"input_tokens": usage.input_tokens, "output_tokens": usage.output_tokens, "requests": usage.requests} if usage else {}  # fmt: skip
+    record(call=agent.name, model=llm.model_name, seconds=seconds, **tokens, prompt=prompt, output=saved, **({"error": error} if error else {}))  # fmt: skip
     return output
 
 
@@ -100,10 +103,25 @@ def parallel(fn: Callable, items: Iterable) -> list:
 
 
 def start_trace(path: Path) -> None:
-    """Record every later model call's prompt and output in `path`, one JSON line each."""
+    """Record every later model call (prompt, output, tokens, seconds) and stage time in `path`, one JSON line each."""
     global _trace
     _trace = path
     path.write_text("")
+
+
+def record(**line) -> None:
+    """One line in the trace, if one is open."""
+    if _trace:
+        with _trace_lock, _trace.open("a") as f:
+            f.write(json.dumps(line) + "\n")
+
+
+@contextmanager
+def stage(name: str):
+    """Record how long the block took, as {"stage": name, "seconds": ...}."""
+    start = time.monotonic()
+    yield
+    record(stage=name, seconds=round(time.monotonic() - start, 1))
 
 
 def _render(template: str, **values) -> str:
