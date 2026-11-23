@@ -26,7 +26,7 @@ Everything runs locally on one NVIDIA GPU (developed on an RTX 5070 Ti, 16 GB), 
    - **Abstract**: the text under the abstract heading, transcribed for the ear: symbols, numbers and acronyms in spoken form, nothing else changed. A transcription that keeps under 80% of the original words, or keeps symbols, is made again.
    - **Contributions**: from the abstract, introduction and conclusion, each contribution in plain English (the problem, what was done before, what is new), for a listener who knows ML but not the subfield.
    - **How it works**, so that the listener could implement it. The source is split at its headings into sections ([semchunk](https://github.com/isaacus-dev/semchunk) splits any over `--chunk` tokens); a note-taker summarises each, and a planner (thinking on) outlines the method as a glossary of plain names and two to seven components, each naming the sections it draws on. For each component, a detailer (thinking on) rewrites its inputs, steps and outputs from the full text of those sections, and one part is written from it. Each part is checked by a round trip: a listener agent writes pseudocode from the narration alone, and a checker (thinking on) compares it with the component and the source; any word with a digit or symbol in it is also a problem, found by a regex. A part with problems is rewritten once.
-3. **Speak**: [Qwen3-TTS](https://huggingface.co/Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice) (1.7B, Apache-2.0) on a [vLLM-Omni](https://github.com/vllm-project/vllm-omni) server reads the script, a batch of paragraphs per request, in a style set by `prompts/voice.md`.
+3. **Speak**: [Qwen3-TTS](https://huggingface.co/Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice) (1.7B, Apache-2.0) on a [vLLM-Omni](https://github.com/vllm-project/vllm-omni) server reads the script, a batch of paragraphs per request, with the model's own delivery: no style instruction, since one made the voice and tone drift between paragraphs (`teacher speak --style` sends `prompts/voice.md`).
 
 ### Models and agents
 
@@ -89,7 +89,7 @@ Everything the models see is in `src/teacher/prompts/`, as [Jinja2](https://jinj
 | `tree/` | `splitter`, `note_taker`, `notes_verifier` | `outline`, `write`, `eval` |
 | `part/` | `writer`, `listener`, `checker` | `run`, `write`, `eval` |
 | `eval/` | `judge` | `eval` |
-| `voice.md` | the narrator's voice, for TTS | `run` |
+| `voice.md` | a speaking-style instruction for TTS, off by default | `speak --style` |
 
 ## Usage
 

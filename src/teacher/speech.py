@@ -32,12 +32,13 @@ def make_speakable(script: str) -> list[str]:
 
 @dataclass(frozen=True)
 class Voice:
-    """How each paragraph is spoken. `style` sends prompts/voice.md as Qwen3-TTS's instruction; `clone` is a
+    """How each paragraph is spoken. By default, the speaker as Qwen3-TTS speaks with no instruction: an instruction
+    made voices and tone drift between paragraphs. `style` sends prompts/voice.md as the instruction; `clone` is a
     reference clip (a WAV file, with its transcript in a .txt beside it) that every paragraph imitates, which
     needs a Base (voice clone) model."""
 
     speaker: str = "ryan"
-    style: bool = True
+    style: bool = False
     clone: Path | None = None
 
 
