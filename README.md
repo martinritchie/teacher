@@ -32,9 +32,15 @@ Everything runs locally on one NVIDIA GPU (developed on an RTX 5070 Ti, 16 GB), 
 
 Every model, where it runs, and every agent that calls it. **Thinking** agents run with the model's reasoning on (Qwen3's thinking mode, or Claude at effort high); **writing** agents run with it off (Claude at effort low). Agents with a typed output use JSON-schema structured output.
 
-![Models and agents: what runs where, the teacher run flow, and the outline tree](docs/pipeline.svg)
+What runs where: the teacher CLI holds every agent, and each model runs on the one GPU in turn, or on the Anthropic API for evals.
 
-The diagram is drawn in [Excalidraw](https://excalidraw.com): `docs/pipeline.svg` has the scene embedded, so it opens for editing in Excalidraw or its VS Code extension, and `docs/pipeline.excalidraw` is the same scene as plain JSON.
+![teacher: what runs where (C4 container view)](docs/containers.svg)
+
+Which model does what during `teacher run`, in order. Blue calls run with thinking off, orange with it on.
+
+![teacher run: which model does what, in order](docs/run.svg)
+
+Both diagrams are drawn in [Excalidraw](https://excalidraw.com). Each SVG in `docs/` has its scene embedded, so it opens for editing in Excalidraw or its VS Code extension, and the `.excalidraw` file beside it is the same scene as plain JSON.
 
 | Agent | Prompt | Mode | Output |
 |---|---|---|---|
