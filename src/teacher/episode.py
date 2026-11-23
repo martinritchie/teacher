@@ -94,18 +94,25 @@ def split_into_chunks(markdown: str, model: str, max_tokens: int) -> list[str]:
 
 
 def write_episode(markdown: str, chunks: list[str], llm: Model, minutes: int) -> str:
-    """The script; every call goes to the trace, if one is open (llm.start_trace)."""
-    abstract = _read_abstract(_section(markdown, "abstract"), llm)
-    contributions = ask_until(
-        _contributions_writer,
-        llm,
-        lambda c: unspoken(" ".join(c.spoken())),
-        heard=abstract,
-        introduction=_section(markdown, "introduction") or chunks[0],
-        conclusion=_section(markdown, "conclusions?"),
-    )
-    heard = "\n\n".join(filter(None, [abstract, *contributions.spoken()]))
-    notes = parallel(lambda c: ask(_section_notes, llm, chunk=c), chunks)
+    """The script; every call goes to the trace, if one is open (llm.start_trace). The section notes are written
+    while the abstract and contributions are, since they do not depend on what was heard."""
+
+    def opening() -> str:
+        abstract = _read_abstract(_section(markdown, "abstract"), llm)
+        contributions = ask_until(
+            _contributions_writer,
+            llm,
+            lambda c: unspoken(" ".join(c.spoken())),
+            heard=abstract,
+            introduction=_section(markdown, "introduction") or chunks[0],
+            conclusion=_section(markdown, "conclusions?"),
+        )
+        return "\n\n".join(filter(None, [abstract, *contributions.spoken()]))
+
+    def all_notes() -> list[str]:
+        return parallel(lambda c: ask(_section_notes, llm, chunk=c), chunks)
+
+    heard, notes = parallel(lambda job: job(), [opening, all_notes])
     headings = [_headings(c) for c in chunks]
     method = ask(_planner, llm, notes=notes, headings=headings, heard=heard)
     budget = minutes * WORDS_PER_MINUTE - len(heard.split())
@@ -131,14 +138,18 @@ def _read_abstract(abstract: str, llm: Model) -> str:
 def _how_it_works(
     method: Method, chunks: list[str], heard: str, budget: int, llm: Model
 ) -> list[str]:
-    """One checked part per component, its mechanism first rewritten from its sections. Word targets are
-    the planner's, shrunk to fit `budget` and capped."""
+    """One checked part per component, its mechanism first rewritten from its sections. The rewrites run at
+    once, as none depends on another or on a part; the parts are written in order, each continuing the last.
+    Word targets are the planner's, shrunk to fit `budget` and capped."""
     scale = min(1, max(budget, 0) / max(sum(c.words for c in method.components), 1))
-    parts: list[str] = []
-    for c in method.components:
-        source = _source(c.chunks, chunks)
+
+    def detailed(c: Component) -> Detail:
         fallback = Detail(**c.model_dump(include=set(Detail.model_fields)))
-        detail = ask(_detailer, llm, fallback, glossary=method.glossary, outline=method.components, component=c, source=source)  # fmt: skip
+        return ask(_detailer, llm, fallback, glossary=method.glossary, outline=method.components, component=c, source=_source(c.chunks, chunks))  # fmt: skip
+
+    parts: list[str] = []
+    for c, detail in zip(method.components, parallel(detailed, method.components)):
+        source = _source(c.chunks, chunks)
         brief = Brief(
             component=c.model_copy(update=detail.model_dump()),
             outline=method.components,

@@ -153,7 +153,7 @@ def test_each_part_gets_its_component_and_its_chunks(llm, tts, tmp_path):
 
 
 def test_each_component_is_detailed_from_its_sections(llm, tts, tmp_path):
-    """Before its part is written, each component's mechanism is rewritten from its sections; the writer and checker get the rewrite. Name, sections and words stay the outline's."""
+    """Before the parts are written, every component's mechanism is rewritten from its sections, all at once; the writer and checker get the rewrite. Name, sections and words stay the outline's."""
     llm.components = [component(1, [3]), component(2, [2])]
     run(PDF, "--out", tmp_path)
     notes, details, parts = llm.of("notes"), llm.of("detail"), llm.of("method")
@@ -162,7 +162,9 @@ def test_each_component_is_detailed_from_its_sections(llm, tts, tmp_path):
         "1. Step 2." in details[1].prompt
         and "- piece 1: Purpose 1." in details[1].prompt
     )
-    assert llm.index(details[1]) < llm.index(parts[1])
+    assert llm.index(details[-1]) < llm.index(
+        parts[0]
+    )  # every rewrite at once, before the first part
     assert (
         "1. Detailed step 2." in parts[1].prompt and "1. Step 2." not in parts[1].prompt
     )
