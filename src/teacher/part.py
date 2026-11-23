@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 from pydantic_ai.models import Model
 
 from teacher.llm import Problems, agent, ask, ask_until
-from teacher.speech import unspoken
+from teacher.speech import spell_numbers, unspoken
 
 MAX_PART_WORDS = 300  # a longer part pads; --minutes only ever shortens
 # About 4k tokens of source per part; keeps the checker inside its window.
@@ -114,7 +114,9 @@ def write_part(
             log.append({"draft": part, "checker": verdict.problems, "symbols": symbols})
         return symbols + verdict.problems
 
-    return ask_until(_writer, llm, check, **values).strip()
+    return ask_until(
+        _writer, llm, check, clean=spell_numbers, **values
+    ).strip()  # numbers in words without a rewrite
 
 
 def _previous(parts: list[str]) -> str:

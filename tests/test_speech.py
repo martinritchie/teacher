@@ -45,3 +45,14 @@ def test_voice_model_writes_playable_audio(tmp_path):
             ["The authors train an autoencoder.", "Then they predict."], Voice(), server
         )
     assert len(clips) == 2 and sum(len(c) for c in clips) / SAMPLE_RATE > 2
+
+
+def test_numbers_are_spelled_as_spoken():
+    """Digits become words; digits inside words and symbols are left for the writer to rephrase."""
+    from teacher.speech import spell_numbers
+
+    text = "Use 128 dimensions, a floor of 0.5, and 15% masking, as in A.1 with x2 and 1/n."
+    assert spell_numbers(text) == (
+        "Use one hundred and twenty-eight dimensions, a floor of zero point five, and fifteen percent masking, "
+        "as in A.1 with x2 and 1/n."
+    )

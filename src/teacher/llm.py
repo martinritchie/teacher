@@ -97,13 +97,19 @@ async def _run(agent: Agent, prompt: str, llm: Model, settings: dict, messages: 
 
 
 def ask_until(
-    agent: Agent, llm: Model, check: Callable, tries: int = 2, **values
+    agent: Agent,
+    llm: Model,
+    check: Callable,
+    tries: int = 2,
+    clean: Callable = lambda output: output,
+    **values,
 ) -> object:
     """Ask, and while `check(output)` finds problems and tries are left, ask again with the last output
-    as `draft` and the problems as `problems`. The last try is not checked."""
+    as `draft` and the problems as `problems`. The last try is not checked. `clean` is applied to every
+    output first, for fixes code can make without a model."""
     output, problems = None, []
     for attempt in range(tries):
-        output = ask(agent, llm, draft=output, problems=problems, **values)
+        output = clean(ask(agent, llm, draft=output, problems=problems, **values))
         if attempt == tries - 1 or not (problems := check(output)):
             return output
 

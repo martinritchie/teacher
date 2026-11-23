@@ -24,6 +24,21 @@ def unspoken(text: str) -> list[str]:
     return [f"Write these as they are spoken, with no symbols or digits: {', '.join(found)}"] if found else []  # fmt: skip
 
 
+def spell_numbers(text: str) -> str:
+    """Numbers written in digits, in words, as a reader would say them: "0.5" is "zero point five", "15%" is
+    "fifteen percent". Digits inside a word or a symbol ("A.1", "x2", "1/n") are left for the writer."""
+    from decimal import Decimal
+
+    from num2words import num2words
+
+    text = re.sub(r"(?<![\w.])(\d+(?:\.\d+)?)\s?%", r"\1 percent", text)
+    return re.sub(
+        r"(?<![\w./])\d+(?:\.\d+)?(?![\w/]|\.\d)",
+        lambda m: num2words(Decimal(m.group())),
+        text,
+    )
+
+
 def make_speakable(script: str) -> list[str]:
     """Paragraphs with tags and markdown marks removed, since TTS reads markup aloud."""
     plain = re.sub(r"[#*<>]", "", re.sub(r"<[^>]*>", "", script))

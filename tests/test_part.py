@@ -83,8 +83,13 @@ def test_failed_check_gives_one_rewrite(llm, tts, tmp_path):
 
 
 def test_symbols_in_a_part_are_problems(llm, tts, tmp_path):
-    """Words with digits or symbols in a part go to the rewrite as a problem, even when the checker finds none."""
+    """Numbers are spelled out in code, with no rewrite; words with symbols left in a part go to the rewrite as a
+    problem, even when the checker finds none."""
     llm.components = [component(1, [1])]
     llm.parts = ["Set K=4 for 99.9% accuracy."]
     run(PDF, "--out", tmp_path, "--no-audio")
-    assert "K=4, 99.9%" in block(llm.of("method")[1].prompt, "problems")
+    problems = block(llm.of("method")[1].prompt, "problems")
+    assert (
+        "K=four" in problems
+        and "ninety-nine point nine percent" in llm.of("check")[0].prompt
+    )
