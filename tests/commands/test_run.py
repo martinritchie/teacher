@@ -34,6 +34,20 @@ def test_rejected_call_is_an_error(llm, tts, tmp_path):
     assert not tts
 
 
+def test_a_call_rejected_by_another_model_names_it(llm, tts, tmp_path):
+    """A rejection from a model other than the script model (the eval judge, out of API credit) names that model,
+    with no hint about --chunk."""
+    llm.error = ModelHTTPError(
+        400, "claude-sonnet-5-5", body="credit balance is too low"
+    )
+    result = invoke(PDF, "--out", tmp_path, "--model", SMALL_MODEL)
+    assert (
+        result.exit_code != 0
+        and "claude-sonnet-5-5 rejected a call (400)" in result.output
+    )
+    assert "--chunk" not in result.output
+
+
 def test_models_are_cli_arguments(llm, tts, tmp_path):
     """--model is the model vLLM serves, with its profile's arguments. --voice reaches the TTS."""
     run(PDF, "--out", tmp_path, "--voice", "aiden", "--no-audio")

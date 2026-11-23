@@ -36,8 +36,11 @@ def serve_script_model(
         try:
             yield served(model, url)
         except ModelHTTPError as e:
+            hint = (
+                "\nIf it is too long, lower --chunk." if e.model_name == model else ""
+            )
             typer.echo(
-                f"vLLM rejected a call: {e.body}\nIf it is too long, lower --chunk."
+                f"{e.model_name} rejected a call ({e.status_code}): {e.body}{hint}"
             )
             raise typer.Exit(1)
 
