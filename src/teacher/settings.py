@@ -62,6 +62,32 @@ PROFILES = {
             },
         },
     },
+    # NVIDIA's Nemotron 3.5 Bolt E4B (post-trained Gemma 4), a candidate eval judge from another family than the
+    # Qwen narrator. Its card's sampling (temperature 1.0, top-p 0.95, both modes); BF16 weights quantised to FP8
+    # as they load, about 8 GB, to fit beside a modest KV cache.
+    "nvidia/NVIDIA-Nemotron-3.5-Bolt-": {
+        "parallel": 16,
+        "server": [
+            *"--quantization fp8 --gpu-memory-utilization 0.85 --max-num-seqs 16".split(),
+            *["--max-model-len", str(CONTEXT), "--reasoning-parser", "gemma4"],
+            *[
+                "--structured-outputs-config",
+                '{"backend": "xgrammar", "disable_any_whitespace": true}',
+            ],
+        ],
+        "writing": {
+            "max_tokens": 2048,
+            "temperature": 1.0,
+            "top_p": 0.95,
+            "extra_body": {"chat_template_kwargs": {"enable_thinking": False}},
+        },
+        "thinking": {
+            "max_tokens": 6144,
+            "temperature": 1.0,
+            "top_p": 0.95,
+            "extra_body": {"chat_template_kwargs": {"enable_thinking": True}},
+        },
+    },
     # Claude on the Anthropic API: thinking is always adaptive and effort sets its depth; no sampling settings.
     # A refused request is re-run on a fallback model in the same call (server-side fallback).
     "claude-": {

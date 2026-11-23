@@ -4,6 +4,7 @@ import typer
 
 from teacher.commands.evaluate import evaluate
 from teacher.commands.hear import hear_clips
+from teacher.commands.judge_bench import judge_bench
 from teacher.commands.outline import outline
 from teacher.commands.run import run
 from teacher.commands.serve import serve
@@ -19,6 +20,7 @@ app.command(name="eval")(evaluate)
 app.command()(serve)
 app.command(name="speak")(speak_script)
 app.command(name="hear")(hear_clips)
+app.command(name="judge-bench")(judge_bench)
 
 if __name__ == "__main__":
     app()
