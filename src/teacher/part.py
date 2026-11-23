@@ -16,6 +16,9 @@ from teacher.speech import spell_numbers, unspoken
 MAX_PART_WORDS = 300  # a longer part pads; --minutes only ever shortens
 # About 4k tokens of source per part; keeps the checker inside its window.
 MAX_SOURCE_CHARS = 16000
+# Whether a listener and a checker review each part before a rewrite. With CHECK_PARTS False only symbols that code
+# cannot spell (1/n, Greek letters) send a part back. Set by evals: see README, "The part loop".
+CHECK_PARTS = False
 
 
 class Term(BaseModel):
@@ -98,6 +101,11 @@ def write_part(
     values = dict(brief) | {"previous": _previous(parts)}
 
     def check(part: str) -> list[str]:
+        if not CHECK_PARTS:
+            symbols = unspoken(part)
+            if log is not None:
+                log.append({"draft": part, "checker": [], "symbols": symbols})
+            return symbols
         fallback = Reconstruction(pseudocode="UNCLEAR: the listener wrote nothing.")
         heard = "\n\n".join(parts)
         pseudocode = ask(_listener, llm, fallback, heard=heard, part=part).pseudocode

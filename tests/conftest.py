@@ -24,6 +24,7 @@ import semchunk
 import teacher.commands.run as run_mod
 import teacher.episode as episode
 import teacher.llm as llm_mod
+import teacher.part as part
 import teacher.servers as servers
 import teacher.source as source
 import teacher.speech as speech
@@ -64,6 +65,12 @@ def unit(request, monkeypatch):
 def llm(monkeypatch):
     """No server process; the script model is a FunctionModel. Each agent's instructions identify its phase."""
     return _llm(monkeypatch)
+
+
+@pytest.fixture
+def checked(monkeypatch):
+    """A listener and a checker review each part (part.CHECK_PARTS), for the tests of that loop."""
+    monkeypatch.setattr(part, "CHECK_PARTS", True)
 
 
 @pytest.fixture

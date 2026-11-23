@@ -154,7 +154,7 @@ def test_each_part_gets_its_component_and_its_chunks(llm, tts, tmp_path):
     assert 'part on "piece 2"' in parts[1].prompt and len(parts) == 2
 
 
-def test_each_component_is_detailed_from_its_sections(llm, tts, tmp_path):
+def test_each_component_is_detailed_from_its_sections(llm, tts, tmp_path, checked):
     """Before the parts are written, every component's mechanism is rewritten from its sections, all at once; the writer and checker get the rewrite. Name, sections and words stay the outline's."""
     llm.components = [component(1, [3]), component(2, [2])]
     run(PDF, "--out", tmp_path, "--no-audio")
@@ -213,11 +213,11 @@ def test_minutes_shrinks_the_targets_to_fit(llm, tts, tmp_path):
     assert targets(llm)[1] == pytest.approx(2 * targets(llm)[0], abs=1)
 
 
-def test_only_the_outline_and_check_think(episode_run):
+def test_only_the_outline_and_detail_think(episode_run):
     """Thinking is on for the outline and the check and off for everything else, each with Qwen3's sampling for its mode."""
     llm = episode_run.llm
     thinks = {p: s["extra_body"]["chat_template_kwargs"]["enable_thinking"] for p, s in llm.settings.items()}  # fmt: skip
-    assert thinks == {"abstract": False, "contributions": False, "notes": False, "outline": True, "detail": True, "method": False, "reconstruct": False, "check": True}  # fmt: skip
+    assert thinks == {"abstract": False, "contributions": False, "notes": False, "outline": True, "detail": True, "method": False}  # fmt: skip
 
 
 def test_run_with_a_claude_model_chunks_with_the_local_tokenizer(

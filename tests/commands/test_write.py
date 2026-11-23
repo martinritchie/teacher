@@ -9,7 +9,7 @@ from teacher.testing import (
 )
 
 
-def test_write_narrates_every_leaf_under_a_node(llm, tmp_path):
+def test_write_narrates_every_leaf_under_a_node(llm, tmp_path, checked):
     """`teacher write` narrates the leaves under the named node, in order: notes on each leaf's own text, then a part written from them with its siblings as the outline, listened to and checked."""
     (tmp_path / "x.outline.json").write_text(json.dumps(TREE))
     cli("write", tmp_path / "x.outline.json", "--node", "method", "--out", tmp_path)

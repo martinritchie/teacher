@@ -41,7 +41,7 @@ def test_server_option_uses_a_running_server(llm, tmp_path):
     assert llm.started == 1
 
 
-def test_a_claude_model_runs_on_the_api_with_its_own_settings(llm, tmp_path):
+def test_a_claude_model_runs_on_the_api_with_its_own_settings(llm, tmp_path, checked):
     """--model claude-* starts no vLLM server. Its calls get Claude's settings: effort by role, no sampling settings."""
     (tmp_path / "x.outline.json").write_text(json.dumps(TREE))
     args = ["write", tmp_path / "x.outline.json", "--node", "Encoder", "--out", tmp_path, "--model", "claude-sonnet-5-5"]  # fmt: skip

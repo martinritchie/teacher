@@ -122,7 +122,7 @@ def test_repeat_runs_every_case_several_times_at_once(llm, tmp_path):
 
 
 def test_eval_scores_the_first_drafts_and_reports_the_checks_and_their_cost(
-    llm, tmp_path
+    llm, tmp_path, checked
 ):
     """To see what the loop adds: the parts as first drafted are judged on the same facts, the table counts the
     parts the check sent back and its problems, the report lists them, and each agent's calls and time are shown."""

@@ -25,7 +25,7 @@ Everything runs locally on one NVIDIA GPU (developed on an RTX 5070 Ti, 16 GB), 
 2. **Write**: a `vllm serve` subprocess runs the script model (Qwen3-14B-AWQ), and [Pydantic AI](https://ai.pydantic.dev) agents write the script. Each agent is one fixed system prompt and a typed output, used for single-turn calls; plain Python decides what to call next. Independent calls run in parallel (`PARALLEL` in `settings.py`) so vLLM can batch them. The episode has three parts, each given everything the listener has already heard, so it builds on it instead of repeating it:
    - **Abstract**: the text under the abstract heading, transcribed for the ear: symbols, numbers and acronyms in spoken form, nothing else changed. A transcription that keeps under 80% of the original words, or keeps symbols, is made again.
    - **Contributions**: from the abstract, introduction and conclusion, each contribution in plain English (the problem, what was done before, what is new), for a listener who knows ML but not the subfield.
-   - **How it works**, so that the listener could implement it. The source is split at its headings into sections ([semchunk](https://github.com/isaacus-dev/semchunk) splits any over `--chunk` tokens); a note-taker summarises each, and a planner (thinking on) outlines the method as a glossary of plain names and two to seven components, each naming the sections it draws on. For each component, a detailer (thinking on) rewrites its inputs, steps and outputs from the full text of those sections, and one part is written from it. Each part is checked by a round trip: a listener agent writes pseudocode from the narration alone, and a checker (thinking on) compares it with the component and the source; any word with a digit or symbol in it is also a problem, found by a regex. A part with problems is rewritten once.
+   - **How it works**, so that the listener could implement it. The source is split at its headings into sections ([semchunk](https://github.com/isaacus-dev/semchunk) splits any over `--chunk` tokens); a note-taker summarises each, and a planner (thinking on) outlines the method as a glossary of plain names and two to seven components, each naming the sections it draws on. For each component, a detailer (thinking on) rewrites its inputs, steps and outputs from the full text of those sections, and one part is written from it. Numbers in digits are spelled out in code (`spell_numbers`); a part that still has a word with a symbol in it (such as 1/n) is rewritten once. A round-trip check, in which a listener writes pseudocode from the narration alone and a checker compares it with the source, is off by default (`CHECK_PARTS` in `part.py`): see [The part loop](#the-part-loop).
 3. **Speak**: [Qwen3-TTS](https://huggingface.co/Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice) (1.7B, Apache-2.0) on a [vLLM-Omni](https://github.com/vllm-project/vllm-omni) server reads the script, a batch of paragraphs per request, with the model's own delivery: no style instruction, since one made the voice and tone drift between paragraphs (`teacher speak --style` sends `prompts/voice.md`).
 
 ### Models and agents
@@ -77,7 +77,7 @@ Both diagrams are drawn in [Excalidraw](https://excalidraw.com). Each SVG in `do
 | `source.py` | Fetch a path or URL, convert a PDF (MinerU), HTML (trafilatura) or Markdown file, cut the references |
 | `episode.py` | The `run` script: chunking, abstract, contributions, then notes → planner → detailer → a checked part per component |
 | `tree.py` | The outline tree: top-level sections, recursive splitting, the notes loop, narrating a node |
-| `part.py` | One checked spoken part, shared by both: writer → listener → checker → one rewrite; the `Brief` it is written from |
+| `part.py` | One spoken part, shared by both: writer, numbers spelled in code, one rewrite if symbols remain (listener and checker behind `CHECK_PARTS`); the `Brief` it is written from |
 | `judge.py` | The fact judge for `eval`, and the check that its quote is in the narration |
 | `llm.py` | Talking to the model: `agent(name)`, `ask` (one traced call), `ask_until` (ask, check, ask again with the problems), `parallel` |
 | `speech.py` | Strip markup into paragraphs, synthesise them, write `.md` and `.mp3`; the check for words TTS reads badly |
@@ -186,6 +186,19 @@ Unit tests are for feedback on every change: plain `uv run pytest` runs only the
 A test that needs a real model, the GPU, the network or real processes and signals is marked `@pytest.mark.functional`. One of them checks that MinerU still converts the PDF to `tests/data/calm.md`'s headings; if MinerU's output changes, save the new output there. Stop `teacher serve` before `make test-functional` (`pkill -f "teacher serve"`), since its tests load models on the GPU.
 
 `tests/` mirrors `src/teacher/`: `tests/test_tree.py` specifies `tree.py`, `tests/commands/test_run.py` specifies `commands/run.py`, and so on. Shared fixtures are in `tests/conftest.py`. Helpers that tests call directly are in `src/teacher/testing.py`: tests run in pytest's `importlib` import mode, where test modules cannot import each other, and pytest's docs recommend keeping such utilities with the library code. Coverage leaves that file out.
+
+### The part loop
+
+Each part used to go through a round trip: a listener wrote pseudocode from the narration alone, a checker compared it with the source, and the writer rewrote the part to fix what the checker found. `teacher eval` now judges each case's first drafts as well as the final narration, and a grounding checker lists statements the node's text does not support, so the loop's value can be measured. Four settings, three runs each, on the 16 eval cases (73 facts), judged by the local Qwen3-14B:
+
+| Setting | Facts stated (mean) | Unsupported statements | Listener and checker time |
+|---|---|---|---|
+| A: the round trip, as it was | 62.0 | 22.3 | 1,293 s |
+| B: A, with numbers spelled in code instead of by a rewrite | 64.3 | 18.0 | 1,287 s |
+| C: B, and the writer told to add no claims the source does not make | 63.7 | 17.0 | 1,502 s |
+| D: C without the listener and checker (the default) | 65.0 | 15.0 | none |
+
+In A, 22 of 47 rewrites were for digits alone, and the rewrites added unsupported statements ("simple but effective", "this ensures that the model scales") while gaining about one fact. Once the writer stopped adding claims of its own (C), its first drafts stated as many facts as the checked parts and had fewer unsupported statements (12.7 against 17.0). The differences between B, C and D are close to the run-to-run spread (two to four facts), but each step moved both measures the right way. Reports are in `out/loop/`. The listener and checker are one setting away (`CHECK_PARTS = True`), for papers where implementability by ear needs the round trip.
 
 ## Development plan
 
