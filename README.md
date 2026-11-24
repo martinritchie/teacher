@@ -12,8 +12,8 @@ Two episodes made entirely on one local GPU with the default settings (`uv run t
 
 | Paper | Listen | Script |
 |---|---|---|
-| [Continuous Autoregressive Language Models (CALM)](https://arxiv.org/abs/2510.27688) | [MP3, 13 min](episodes/calm-2510.27688.mp3) | [script](episodes/calm-2510.27688.md) |
-| [Self-Supervised Learning from Images with a Joint-Embedding Predictive Architecture (I-JEPA)](https://arxiv.org/abs/2301.08243) | [MP3, 12 min](episodes/i-jepa-2301.08243.mp3) | [script](episodes/i-jepa-2301.08243.md) |
+| [Continuous Autoregressive Language Models (CALM)](https://arxiv.org/abs/2510.27688) | [MP3, 15 min](episodes/calm-2510.27688.mp3) | [script](episodes/calm-2510.27688.md) |
+| [Self-Supervised Learning from Images with a Joint-Embedding Predictive Architecture (I-JEPA)](https://arxiv.org/abs/2301.08243) | [MP3, 13 min](episodes/i-jepa-2301.08243.mp3) | [script](episodes/i-jepa-2301.08243.md) |
 
 GitHub can't play audio inside a README: the MP3 link opens the file page, where "View raw" plays it in the browser or downloads it. PDFs and MP3s are stored with [Git LFS](https://git-lfs.com), so run `git lfs install` before cloning to get the files rather than pointers.
 
