@@ -84,10 +84,10 @@ def even_out(clips: list[np.ndarray], paragraphs: list[str]) -> list[np.ndarray]
     """The clips made to sound like one take. Each paragraph is synthesised on its own and comes out with its own
     tone, loudness and pace, so a listener hears every boundary: match each clip's tonal balance and loudness to
     the episode's median, then stretch it to WORDS_PER_MINUTE."""
-    from scipy.signal import fftconvolve, firwin2, welch
-
     if not clips or min(len(c) for c in clips) < SAMPLE_RATE // 2:
         return clips  # too short to measure
+    from scipy.signal import fftconvolve, firwin2, welch
+
     bands = np.geomspace(60, 9000, 25)  # third-octave-ish bands of the voice
 
     def spectrum(clip: np.ndarray) -> np.ndarray:
