@@ -10,7 +10,13 @@ import httpx
 import numpy as np
 import soundfile
 
-from teacher.settings import LANGUAGE, PAUSE_SECONDS, PROMPTS, SAMPLE_RATE
+from teacher.settings import (
+    LANGUAGE,
+    PAUSE_SECONDS,
+    PROMPTS,
+    SAMPLE_RATE,
+    WORDS_PER_MINUTE,
+)
 
 _BATCH = 8  # paragraphs per request
 UNSPOKEN = re.compile(
@@ -66,11 +72,93 @@ def speak(paragraphs: list[str], voice: Voice, server: str) -> list[np.ndarray]:
         audio = base64.b64encode(voice.clone.read_bytes()).decode()
         request |= {"task_type": "Base", "ref_audio": f"data:audio/wav;base64,{audio}",
                     "ref_text": voice.clone.with_suffix(".txt").read_text().strip()}  # fmt: skip
-    return [
+    clips = [
         clip
         for batch in _batches(paragraphs)
         for clip in _synthesise(batch, request, server)
     ]
+    return even_out(clips, paragraphs)
+
+
+def even_out(clips: list[np.ndarray], paragraphs: list[str]) -> list[np.ndarray]:
+    """The clips made to sound like one take. Each paragraph is synthesised on its own and comes out with its own
+    tone, loudness and pace, so a listener hears every boundary: match each clip's tonal balance and loudness to
+    the episode's median, then stretch it to WORDS_PER_MINUTE."""
+    from scipy.signal import fftconvolve, firwin2, welch
+
+    if not clips or min(len(c) for c in clips) < SAMPLE_RATE // 2:
+        return clips  # too short to measure
+    bands = np.geomspace(60, 9000, 25)  # third-octave-ish bands of the voice
+
+    def spectrum(clip: np.ndarray) -> np.ndarray:
+        freqs, power = welch(clip, SAMPLE_RATE, nperseg=2048)
+        return (
+            np.array(
+                [
+                    power[(freqs >= lo) & (freqs < hi)].mean()
+                    for lo, hi in zip(bands, bands[1:])
+                ]
+            )
+            + 1e-12
+        )
+
+    def level(clip: np.ndarray) -> float:
+        frames = clip[: len(clip) // 480 * 480].reshape(-1, 480)  # 20 ms
+        rms = np.sqrt((frames**2).mean(1))
+        speech = rms[rms > rms.max() / 30]  # not the pauses
+        return float(np.sqrt((speech**2).mean())) if speech.size else 0.0
+
+    reference = np.median([spectrum(c) for c in clips], axis=0)
+    out = []
+    for clip, text in zip(clips, paragraphs):
+        gain_db = np.clip(10 * np.log10(reference / spectrum(clip)), -6, 6)
+        centres = np.sqrt(bands[:-1] * bands[1:])
+        grid = np.linspace(0, SAMPLE_RATE / 2, 513)
+        response = 10 ** (np.interp(grid, centres, gain_db) / 20)
+        out.append(
+            fftconvolve(clip, firwin2(1025, grid / grid[-1], response), mode="same")
+        )
+    target = np.median([level(c) for c in out])
+    out = [c * target / max(level(c), 1e-9) for c in out]
+    paces = [
+        len(t.split()) / (len(c) / SAMPLE_RATE / 60) for c, t in zip(out, paragraphs)
+    ]
+    return [
+        stretch(c, float(np.clip(WORDS_PER_MINUTE / p, 0.7, 1.4)))
+        for c, p in zip(out, paces)
+    ]
+
+
+def stretch(
+    audio: np.ndarray, rate: float, frame: int = 1024, tolerance: int = 256
+) -> np.ndarray:
+    """`audio` played `rate` times as fast, pitch unchanged (WSOLA: overlap-add of input frames, each shifted by up
+    to `tolerance` samples to best continue the last, so the waveform stays natural rather than phasey)."""
+    from scipy.signal import correlate
+
+    if abs(rate - 1) < 0.01:
+        return audio
+    hop, window, n_out = frame // 2, np.hanning(frame), int(len(audio) / rate)
+    padded = np.pad(audio, (tolerance, frame + tolerance))
+    out, weight = np.zeros(n_out + frame), np.zeros(n_out + frame)
+    position = tolerance
+    for k in range(n_out // hop + 1):
+        ideal = int(k * hop * rate) + tolerance
+        if ideal + frame + tolerance > len(padded):
+            break
+        if k:
+            natural = padded[position + hop : position + hop + frame]
+            search = padded[ideal - tolerance : ideal + tolerance + frame]
+            position = (
+                ideal
+                - tolerance
+                + int(np.argmax(correlate(search, natural, mode="valid")))
+            )
+        else:
+            position = ideal
+        out[k * hop : k * hop + frame] += padded[position : position + frame] * window
+        weight[k * hop : k * hop + frame] += window
+    return (out / np.maximum(weight, 1e-8))[:n_out].astype(audio.dtype)
 
 
 def save(
