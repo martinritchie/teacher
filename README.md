@@ -26,7 +26,7 @@ Everything runs locally on one NVIDIA GPU (developed on an RTX 5070 Ti, 16 GB), 
    - **Abstract**: the text under the abstract heading, transcribed for the ear: symbols, numbers and acronyms in spoken form, nothing else changed. A transcription that keeps under 80% of the original words, or keeps symbols, is made again.
    - **Contributions**: from the abstract, introduction and conclusion, each contribution in plain English (the problem, what was done before, what is new), for a listener who knows ML but not the subfield.
    - **How it works**, so that the listener could implement it. The source is split at its headings into sections ([semchunk](https://github.com/isaacus-dev/semchunk) splits any over `--chunk` tokens); a note-taker summarises each, and a planner (thinking on) outlines the method as a glossary of plain names and two to seven components, each naming the sections it draws on. For each component, a detailer (thinking on) rewrites its inputs, steps and outputs from the full text of those sections, and one part is written from it. Numbers in digits are spelled out in code (`spell_numbers`); a part that still has a word with a symbol in it (such as 1/n) is rewritten once. A round-trip check, in which a listener writes pseudocode from the narration alone and a checker compares it with the source, is off by default (`CHECK_PARTS` in `part.py`): see [The part loop](#the-part-loop).
-3. **Speak**: [Qwen3-TTS](https://huggingface.co/Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice) (1.7B, Apache-2.0) on a [vLLM-Omni](https://github.com/vllm-project/vllm-omni) server reads the script, a batch of paragraphs per request, with the model's own delivery: no style instruction, since one made the voice and tone drift between paragraphs (`teacher speak --style` sends `prompts/voice.md`).
+3. **Speak**: [Qwen3-TTS](https://huggingface.co/Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice) (1.7B, Apache-2.0) on a [vLLM-Omni](https://github.com/vllm-project/vllm-omni) server reads the script, a batch of paragraphs per request, as the preset speaker Ryan with a short style instruction for warm, varied intonation (`prompts/voice.md`; `--no-style` drops it). Each paragraph comes out with its own pace, loudness and tone, so `even_out` then matches every clip's tonal balance and loudness to the episode's median and stretches it to `WORDS_PER_MINUTE` (120), with a WSOLA time-stretch.
 
 ### Models and agents
 
@@ -95,7 +95,7 @@ Everything the models see is in `src/teacher/prompts/`, as [Jinja2](https://jinj
 | `tree/` | `splitter`, `note_taker`, `notes_verifier` | `outline`, `write`, `eval` |
 | `part/` | `writer`, `listener`, `checker` | `run`, `write`, `eval` |
 | `eval/` | `judge` | `eval` |
-| `voice.md` | a speaking-style instruction for TTS, off by default | `speak --style` |
+| `voice.md` | the speaking-style instruction for TTS, sent to preset speakers | `run`, `speak` |
 
 ## Usage
 

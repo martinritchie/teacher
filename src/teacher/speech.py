@@ -53,20 +53,21 @@ def make_speakable(script: str) -> list[str]:
 
 @dataclass(frozen=True)
 class Voice:
-    """How each paragraph is spoken. By default, the speaker as Qwen3-TTS speaks with no instruction: an instruction
-    made voices and tone drift between paragraphs. `style` sends prompts/voice.md as the instruction; `clone` is a
-    reference clip (a WAV file, with its transcript in a .txt beside it) that every paragraph imitates, which
-    needs a Base (voice clone) model."""
+    """How each paragraph is spoken. `style` sends prompts/voice.md, a short instruction for warm, varied
+    intonation, to a preset speaker; without it the delivery is flatter (an earlier, longer instruction made voices
+    drift, which even_out now corrects). `clone` is a reference clip (a WAV file, with its transcript in a .txt
+    beside it) that every paragraph imitates, which needs a Base (voice clone) model and takes its delivery from
+    the clip, so no instruction is sent."""
 
     speaker: str = "ryan"
-    style: bool = False
+    style: bool = True
     clone: Path | None = None
 
 
 def speak(paragraphs: list[str], voice: Voice, server: str) -> list[np.ndarray]:
     """One clip per paragraph."""
     request = {"voice": voice.speaker, "language": LANGUAGE, "response_format": "wav"}
-    if voice.style:
+    if voice.style and not voice.clone:
         request["instructions"] = (PROMPTS / "voice.md").read_text().strip()
     if voice.clone:
         audio = base64.b64encode(voice.clone.read_bytes()).decode()

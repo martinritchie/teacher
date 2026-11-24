@@ -17,7 +17,7 @@ from teacher.settings import (
 
 
 def test_speak_sends_the_chosen_voice_settings(tmp_path, monkeypatch):
-    """`teacher speak` voices an existing script; by default with no style instruction; --clone sends the
+    """`teacher speak` voices an existing script with the style instruction; --clone sends no instruction but the
     reference clip and its transcript to the Base model, and --temperature reaches the server's deploy config."""
     import teacher.commands.speak as speak_mod
     import teacher.speech as speech_mod
@@ -58,3 +58,12 @@ def test_speak_sends_the_chosen_voice_settings(tmp_path, monkeypatch):
         and body["ref_text"] == "The reference words."
     )
     assert len(list((tmp_path / "ep.clips").glob("*.wav"))) == 2
+    sent.clear()
+    result = CliRunner().invoke(
+        app, ["speak", str(tmp_path / "ep.md"), "--out", str(tmp_path)]
+    )
+    assert result.exit_code == 0, result.output
+    assert (
+        sent[0]["instructions"].startswith("Explaining an idea")
+        and sent[0]["voice"] == "ryan"
+    )

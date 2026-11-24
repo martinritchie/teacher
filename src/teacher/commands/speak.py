@@ -19,8 +19,8 @@ def speak_script(
     ],
     voice: str = typer.Option(VOICE, help="Qwen3-TTS speaker"),
     style: bool = typer.Option(
-        False,
-        help="Send prompts/voice.md as the speaking-style instruction (off: the model's own delivery)",
+        True,
+        help="Send prompts/voice.md, the speaking-style instruction, to a preset speaker (off: the model's own delivery)",
     ),
     temperature: float = typer.Option(
         None, help="Sampling temperature of the TTS model (vLLM-Omni's default: 0.9)"
