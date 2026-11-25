@@ -9,8 +9,10 @@ from pathlib import Path
 
 import typer
 
-from teacher.settings import SCRIPT_MODEL
+from teacher.settings import MIN_FREE_GPU_GIB, SCRIPT_MODEL
 from teacher.source import _name_from
+
+GPU_BUSY = 75  # exit code: nothing wrong, try again later (EX_TEMPFAIL)
 
 
 def episodes(
@@ -29,6 +31,11 @@ def episodes(
     from teacher.cli import app
 
     todo = [(k, s) for k, s in citations(bib.read_text()) if not (out / f"{k}.mp3").exists()]  # fmt: skip
+    free = gpu_free_gib()
+    if todo and not dry_run and free < MIN_FREE_GPU_GIB:
+        typer.echo(f"{len(todo)} to make, but the GPU has {free:.1f} GiB free and a run needs {MIN_FREE_GPU_GIB}: "
+                   "close games and log out of the desktop, then try again.")  # fmt: skip
+        raise typer.Exit(GPU_BUSY)
     for key, source in todo:
         typer.echo(f"{key}: {source or 'no eprint, url or doi; skipped'}")
         if dry_run or not source:
@@ -39,6 +46,21 @@ def episodes(
         for ext in ("md", "mp3"):
             shutil.copy(work / f"{_name_from(source)}.{ext}", out / f"{key}.{ext}")
     typer.echo(f"{len(todo)} to make" if dry_run else f"Made {len(todo)} episode(s)")
+
+
+def gpu_free_gib() -> float:
+    """Free memory on the GPU now; desktops and games hold some."""
+    import subprocess
+
+    query = ["nvidia-smi", "--query-gpu=memory.free", "--format=csv,noheader,nounits"]
+    return (
+        int(
+            subprocess.run(
+                query, capture_output=True, text=True, check=True
+            ).stdout.split()[0]
+        )
+        / 1024
+    )
 
 
 def citations(text: str) -> list[tuple[str, str]]:

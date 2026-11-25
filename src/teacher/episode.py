@@ -190,10 +190,13 @@ def _credits(front: str, llm: Model) -> str:
         return absent and [f"Not on the front page: {', '.join(absent)}. Copy names exactly as printed."]  # fmt: skip
 
     credits = ask_until(_credits_reader, llm, check, front=front)
+    everyone = list(dict.fromkeys(n for a in credits.affiliations for n in a.authors))
+    # an author's own name or a web address is not an institution (a blog post often names none)
+    places = [a for a in credits.affiliations if a.authors and a.institution.strip() and a.institution not in everyone and not re.search(r"\.\w", a.institution)]  # fmt: skip
     named: set[str] = set()
-    lines = []
-    for a in (a for a in credits.affiliations if a.authors):
-        names = a.authors[:MAX_NAMED] + [f"{_number(len(a.authors) - MAX_NAMED)} others"] * (len(a.authors) > MAX_NAMED)  # fmt: skip
+    lines = [] if places or not everyone else [f"The authors are {_listed(_capped(everyone))}." if len(everyone) > 1 else f"The author is {everyone[0]}."]  # fmt: skip
+    for a in places:
+        names = _capped(a.authors)
         also = " also" if set(a.authors) <= named else ""
         lines.append(
             f"{_listed(names)} {'are' if len(names) > 1 else 'is'}{also} at {a.institution}."
@@ -254,6 +257,10 @@ def _headings(chunk: str) -> str:
 def _overview(method: Method) -> str:
     names = [c.name for c in method.components]
     return f"Here is how it works. The method has {_number(len(names))} piece{'s' * (len(names) > 1)}: {_listed(names)}."
+
+
+def _capped(names: list[str]) -> list[str]:
+    return names[:MAX_NAMED] + [f"{_number(len(names) - MAX_NAMED)} others"] * (len(names) > MAX_NAMED)  # fmt: skip
 
 
 def _listed(items: list[str]) -> str:

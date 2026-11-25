@@ -220,6 +220,8 @@ def save(
             mp3 = out / f"{name}.mp3"
             mp3.write_bytes(_chapter_tag([(t, ms[i], ms[i + 1]) for i, (t, _) in enumerate(marks)]) + mp3.read_bytes())  # fmt: skip
         (folder := out / f"{name}.clips").mkdir(exist_ok=True)
+        for old in folder.glob("*.wav"):  # a longer earlier version's clips
+            old.unlink()
         for i, clip in enumerate(clips, start=1):
             soundfile.write(folder / f"{i:03d}.wav", clip, SAMPLE_RATE)
 

@@ -21,6 +21,7 @@ WORDS_PER_MINUTE = 120  # speaking pace: every clip is stretched to it, and scri
 SAMPLE_RATE = 24000
 PAUSE_SECONDS = 0.6  # silence between paragraphs
 CHAPTER_PAUSE_SECONDS = 1.5  # silence before a new chapter
+MIN_FREE_GPU_GIB = 15  # the script model peaks at about 14 GiB (weights 9.4, KV cache 3.5, CUDA graphs)
 SENTENCE_PAUSE_SECONDS = (
     0.25  # silence between sentences, when each is spoken on its own
 )

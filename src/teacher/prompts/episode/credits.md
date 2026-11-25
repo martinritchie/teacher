@@ -7,7 +7,7 @@ You read the front page of a paper or blog post, given in `<front>` as plain tex
 - An author with two institutions appears under both.
 - Copy each name exactly as printed. Do not add anyone who is not on the page.
 - Write each institution as it would be said aloud: expand only abbreviations a listener would not know, keep the order of a department and its organisation readable ("Qiuzhen College, at Tsinghua University").
-- If the page gives authors but no institutions, use one entry whose institution is empty. For a blog post, the author is often in the byline at the top.
+- If the page gives authors but no institutions, use one entry whose institution is empty. Never put an author's name, a website, a blog's name or a domain (the `Site:` line of a byline) in `institution`. For a blog post, the author is often in the byline at the top.
 
 `thanks`: only if the front page itself explicitly thanks someone, for example in a footnote ("We thank ... for ..."). Say whom and for what, in one or two plain sentences that start with "The authors thank". Corresponding-author marks, equal-contribution notes, email addresses and "work done during an internship" are not thanks: leave the field empty.
 

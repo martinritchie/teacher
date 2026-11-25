@@ -8,12 +8,13 @@ I am a busy parent, this helps me keep on top of reading: doing the dishes, driv
 
 ## Example episodes
 
-Two episodes made entirely on one local GPU with the default settings (`uv run teacher run <pdf>`): no API calls. Each opens with what the work is about, in the episode's own words, then who wrote it, the contributions in plain English, and how the method works. Each of these is a chapter, which podcast apps show and skip between.
+Three episodes made entirely on one local GPU with the default settings (`uv run teacher run <pdf>`): no API calls. Each opens with what the work is about, in the episode's own words, then who wrote it, the contributions in plain English, and how the method works. Each of these is a chapter, which podcast apps show and skip between.
 
 | Paper | Listen | Script |
 |---|---|---|
 | [Continuous Autoregressive Language Models (CALM)](https://arxiv.org/abs/2510.27688) | [MP3, 11 min](episodes/calm-2510.27688.mp3) | [script](episodes/calm-2510.27688.md) |
 | [Self-Supervised Learning from Images with a Joint-Embedding Predictive Architecture (I-JEPA)](https://arxiv.org/abs/2301.08243) | [MP3, 11 min](episodes/i-jepa-2301.08243.mp3) | [script](episodes/i-jepa-2301.08243.md) |
+| [Jeva: System One Models from First Principles](https://arxiv.org/abs/2610.18773) | [MP3, 11 min](episodes/jeva-2610.18773.mp3) | [script](episodes/jeva-2610.18773.md) |
 
 GitHub can't play audio inside a README: the MP3 link opens the file page, where "View raw" plays it in the browser or downloads it. PDFs and MP3s are stored with [Git LFS](https://git-lfs.com), so run `git lfs install` before cloning to get the files rather than pointers.
 
@@ -111,6 +112,15 @@ uv run teacher run paper.pdf --no-audio                             # script onl
 ### Requesting an episode
 
 [`episodes/episodes.bib`](episodes/episodes.bib) is the show's list of papers. To request an episode, add its BibTeX citation there (the arXiv page's "Export BibTeX Citation" gives one) and merge it. `uv run teacher episodes` then makes an episode for every entry without `episodes/<key>.mp3`, read from its arXiv `eprint`, else its `url`, else its `doi`, and copies the script and MP3 in as `episodes/<key>.md` and `.mp3`. `--dry-run` lists what it would make.
+
+On GitHub, [`.github/workflows/episodes.yml`](.github/workflows/episodes.yml) does this on a self-hosted runner, the PC with the GPU: on a push to `main` that changes `episodes.bib`, every three hours, or when started by hand. It commits the new episodes to `main`. The pipeline needs about 15 GiB of free GPU memory (`MIN_FREE_GPU_GIB`), so a desktop session or a game is often enough to stop it. Then `teacher episodes` makes nothing and exits with code 75, the workflow succeeds without a commit, and the next scheduled run tries again. Starting a game while an episode is being made can still run either out of memory.
+
+The workflow never runs for pull requests, since code from a fork must not run on a home PC. To set up the runner:
+
+1. On GitHub, Settings → Actions → Runners → New self-hosted runner (Linux, x64) shows the download and a one-hour registration token. Follow it, and at `./config.sh` add `--labels gpu`.
+2. Run it as a service, so it starts at boot whether or not anyone logs in: `sudo ./svc.sh install $USER && sudo ./svc.sh start`. It runs as you, so it shares your `uv` cache, Hugging Face models and `~/.local/bin` (uv, git-lfs).
+3. Settings → Actions → General → "Approval for running fork pull request workflows from contributors": choose "Require approval for all external contributors", so a fork's pull request can never bring its own workflow onto the runner without you approving it.
+4. Optional, for phone notifications through [ntfy](https://ntfy.sh): a repository secret `NTFY_TOPIC` holding your topic. The workflow then sends one when an episode is made, when a request is waiting for the GPU (not on scheduled retries), and when it fails.
 
 | Option | Default | |
 |---|---|---|

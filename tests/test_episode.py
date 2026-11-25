@@ -121,6 +121,15 @@ def test_authors_are_read_by_institution_from_the_front_page(episode_run):
     assert paragraphs(episode_run.tts)[1] == AUTHORS
 
 
+def test_authors_with_no_institution_are_just_named(llm, tts, tmp_path):
+    """A blog names no institutions: an author's own name or a web address given as one is dropped, and the
+    authors are simply named."""
+    llm.credits = [{"affiliations": [{"institution": "Chenze Shao", "authors": ["Chenze Shao", "Darren Li"]},
+                                     {"institution": "shaochenze.github.io", "authors": ["Chenze Shao"]}], "thanks": ""}]  # fmt: skip
+    run(PDF, "--out", tmp_path)
+    assert paragraphs(tts)[1] == "The authors are Chenze Shao and Darren Li."
+
+
 def test_a_name_not_on_the_front_page_is_asked_again(llm, tts, tmp_path):
     """A name the front page does not print goes back as a problem, once."""
     llm.credits = [

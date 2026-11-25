@@ -1,0 +1,63 @@
+# Makes an episode for every new citation in episodes/episodes.bib, on the self-hosted GPU runner (the
+# author's PC; see "Requesting an episode" in the README). Never triggered by pull requests: code from a fork
+# must not run on that machine.
+name: Episodes
+
+on:
+  push:
+    branches: [main]
+    paths: [episodes/episodes.bib]
+  schedule:
+    - cron: "17 */3 * * *" # picks up requests left waiting while the GPU was busy or the PC was off
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: episodes # one run at a time; GitHub keeps only the newest waiting one
+  cancel-in-progress: false
+
+jobs:
+  episodes:
+    runs-on: [self-hosted, linux, gpu]
+    timeout-minutes: 240
+    env:
+      NTFY: ${{ secrets.NTFY_TOPIC && format('https://ntfy.sh/{0}', secrets.NTFY_TOPIC) || '' }} # a secret, so the logs mask it
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Make episodes
+        id: make
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          uv sync --frozen
+          set +e
+          uv run teacher episodes
+          code=$?
+          set -e
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          [ "$code" -eq 0 ] || [ "$code" -eq 75 ] # 75: the GPU is busy, a later run tries again
+
+      - name: Commit episodes
+        if: steps.make.outputs.code == '0'
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          git add episodes
+          if git diff --cached --quiet; then exit 0; fi
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -m "Episodes for new citations in episodes.bib"
+          git push
+          if [ -n "$NTFY" ]; then curl -fsS -d "New episode(s): $(git show --stat --format= HEAD -- '*.mp3' | grep -o '[^/ ]*\.mp3' | tr '\n' ' ')" "$NTFY"; fi
+
+      - name: Tell the phone the GPU is busy
+        if: steps.make.outputs.code == '75' && github.event_name != 'schedule' && env.NTFY != ''
+        run: |
+          curl -fsS -d "Episode request waiting: free the GPU (close games, log out of the desktop). It retries every 3 hours." "$NTFY"
+
+      - name: Tell the phone it failed
+        if: failure() && env.NTFY != ''
+        run: |
+          curl -fsS -d "Episodes workflow failed: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" "$NTFY"

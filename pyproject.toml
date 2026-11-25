@@ -22,7 +22,7 @@ dependencies = [
 ]
 
 [project.scripts]
-teacher = "teacher.cli:app"
+teacher = "teacher.cli:main"
 
 [tool.uv]
 package = true

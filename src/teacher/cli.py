@@ -1,5 +1,9 @@
 """Teacher CLI entry point."""
 
+import os
+import signal
+import sys
+
 import typer
 
 from teacher.commands.episodes import episodes
@@ -24,5 +28,18 @@ app.command(name="hear")(hear_clips)
 app.command(name="judge-bench")(judge_bench)
 app.command()(episodes)
 
+
+def main() -> None:
+    """The `teacher` command. After a SIGTERM or SIGHUP, once the `with` blocks have stopped every server, exit at
+    once: worker threads may still be retrying calls to a stopped server, and Python would wait for them."""
+    try:
+        app()
+    except SystemExit as stop:
+        if stop.code not in (128 + signal.SIGTERM, 128 + signal.SIGHUP):
+            raise
+        sys.stdout.flush(), sys.stderr.flush()
+        os._exit(stop.code)
+
+
 if __name__ == "__main__":
-    app()
+    main()

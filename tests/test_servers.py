@@ -100,3 +100,18 @@ def test_a_server_records_its_startup_time_in_the_trace(tmp_path, monkeypatch):
         pass
     line = json.loads((tmp_path / "t.trace.jsonl").read_text())
     assert isinstance(line["startup_seconds"], float) and "server" in line
+
+
+@pytest.mark.functional  # a real process
+def test_a_signal_exit_does_not_wait_for_worker_threads():
+    """After a SIGTERM the servers are stopped by the time `main` sees the exit; a worker thread still retrying a
+    call must not keep the process alive."""
+    import subprocess
+    import sys
+
+    stuck = "import concurrent.futures, signal, time, teacher.cli as c\n" \
+            "def app():\n    concurrent.futures.ThreadPoolExecutor(1).submit(time.sleep, 60)\n    raise SystemExit(128 + signal.SIGTERM)\n" \
+            "c.app = app\nc.main()"  # fmt: skip
+    start = time.monotonic()
+    done = subprocess.run([sys.executable, "-c", stuck], timeout=30)
+    assert done.returncode == 128 + signal.SIGTERM and time.monotonic() - start < 20
