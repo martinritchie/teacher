@@ -22,8 +22,8 @@ class Verdict(BaseModel):
     )
 
 
-_judge = agent("eval/judge", Verdict, thinks=True)
-_grounding = agent("eval/grounding", Problems, thinks=True)
+_judge = agent("judge/judge", Verdict, thinks=True)
+_grounding = agent("judge/grounding", Problems, thinks=True)
 
 
 def judge(fact: str, narration: str, llm: Model) -> tuple[str, str, str]:

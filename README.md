@@ -49,16 +49,17 @@ Both diagrams are drawn in [Excalidraw](https://excalidraw.com). Each SVG in `do
 | Introduction writer | `episode/introduction` | writing | `Introduction` |
 | Credits reader | `episode/credits` | writing | `Credits` |
 | Contributions writer | `episode/contributions` | writing | `Contributions` |
-| Section notes | `plan/section_notes` | writing | text |
-| Planner | `plan/planner` | thinking | `Method` |
-| Detailer | `plan/detailer` | thinking | `Detail` |
+| Section notes | `episode/section_notes` | writing | text |
+| Planner | `episode/planner` | thinking | `Method` |
+| Detailer | `episode/detailer` | thinking | `Detail` |
 | Splitter | `tree/splitter` | thinking | `Split` |
 | Note-taker | `tree/note_taker` | writing | `Notes` |
 | Notes verifier | `tree/notes_verifier` | thinking | `Problems` |
 | Writer | `part/writer` | writing | text |
 | Listener | `part/listener` | writing | `Reconstruction` |
 | Checker | `part/checker` | thinking | `Problems` |
-| Judge | `eval/judge` | thinking, `settings.JUDGE_MODEL` (Qwen3-14B) | `Verdict` |
+| Judge | `judge/judge` | thinking, `settings.JUDGE_MODEL` (Qwen3-14B) | `Verdict` |
+| Grounding checker | `judge/grounding` | thinking, `settings.JUDGE_MODEL` | `Problems` |
 
 ### The outline tree (in progress)
 
@@ -93,11 +94,10 @@ Everything the models see is in `src/teacher/prompts/`, as [Jinja2](https://jinj
 
 | Folder | Agents | Used by |
 |---|---|---|
-| `episode/` | `introduction` writer, `credits` reader, `contributions` writer | `run` |
-| `plan/` | `section_notes`, `planner`, `detailer` | `run` |
+| `episode/` | `introduction` writer, `credits` reader, `contributions` writer, `section_notes`, `planner`, `detailer` | `run` |
 | `tree/` | `splitter`, `note_taker`, `notes_verifier` | `outline`, `narrate`, `eval` |
 | `part/` | `writer`, `listener`, `checker` | `run`, `narrate`, `eval` |
-| `eval/` | `judge` | `eval` |
+| `judge/` | `judge`, `grounding` | `eval`, `judge-bench` |
 
 ## Usage
 

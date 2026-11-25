@@ -99,9 +99,9 @@ class Method(BaseModel):
 _introducer = agent("episode/introduction", Introduction)
 _credits_reader = agent("episode/credits", Credits)
 _contributions_writer = agent("episode/contributions", Contributions)
-_section_notes = agent("plan/section_notes")
-_planner = agent("plan/planner", Method, thinks=True)
-_detailer = agent("plan/detailer", Detail, thinks=True)
+_section_notes = agent("episode/section_notes")
+_planner = agent("episode/planner", Method, thinks=True)
+_detailer = agent("episode/detailer", Detail, thinks=True)
 
 
 def split_into_chunks(markdown: str, model: str, max_tokens: int) -> list[str]:

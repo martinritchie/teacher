@@ -6,9 +6,9 @@ Flow under test:
 3. Introduction: the abstract in other words (prompts/episode/introduction.md); one that copies a run of the abstract is written again, once.
 4. Authors by institution, and any thanks, from the front page (prompts/episode/credits.md).
 5. Contributions: from what was heard, the introduction and the conclusion (prompts/episode/contributions.md).
-5. Notes on each chunk (prompts/plan/section_notes.md), then an outline of the method, with thinking on, from every note and what was heard (prompts/plan/planner.md).
+5. Notes on each chunk (prompts/episode/section_notes.md), then an outline of the method, with thinking on, from every note and what was heard (prompts/episode/planner.md).
 6. For each component of the outline:
-   a. A detailer, with thinking on, rewrites the component's purpose, inputs, steps and outputs from the full text of its sections (prompts/plan/detailer.md).
+   a. A detailer, with thinking on, rewrites the component's purpose, inputs, steps and outputs from the full text of its sections (prompts/episode/detailer.md).
    b. Write one spoken part from the outline, the detailed component, its sections, what was heard and the last sentences of the previous part (prompts/part/writer.md).
    c. A listener writes pseudocode from the narration alone (prompts/part/listener.md).
    d. A checker, with thinking on, compares the pseudocode with the component and its source (prompts/part/checker.md). If there are problems, write the part again with them. One rewrite at most.
