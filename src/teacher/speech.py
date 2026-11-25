@@ -1,4 +1,4 @@
-"""Turn a script into audio with Qwen3-TTS on vLLM-Omni: one clip per paragraph, saved separately and joined."""
+"""Turn a script into audio with Qwen3-TTS on vLLM-Omni: one request per sentence, one clip per paragraph, saved separately and joined."""
 
 import base64
 import io
@@ -63,8 +63,8 @@ class Voice:
     speaker: str = "ryan"
     style: bool = True
     clone: Path | None = None
-    even_pace: bool = True  # stretch every clip to WORDS_PER_MINUTE
-    sentences: bool = False  # one request per sentence, joined with short pauses, not one per paragraph
+    even_pace: bool = False  # stretch every clip to WORDS_PER_MINUTE
+    sentences: bool = True  # one request per sentence, joined with short pauses, not one per paragraph
 
 
 def speak(paragraphs: list[str], voice: Voice, server: str) -> list[np.ndarray]:

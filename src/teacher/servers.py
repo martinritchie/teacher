@@ -98,12 +98,14 @@ def serve_voice_model(
 
 
 def _tts_config(sampling: dict, path: Path) -> Path:
-    import vllm_omni
+    from importlib.util import find_spec
+
     import yaml
 
-    config = yaml.safe_load(
-        (Path(vllm_omni.__file__).parent / "deploy" / "qwen3_tts.yaml").read_text()
-    )
+    package = Path(
+        find_spec("vllm_omni").origin
+    ).parent  # found, not imported: importing it loads torch
+    config = yaml.safe_load((package / "deploy" / "qwen3_tts.yaml").read_text())
     talker = config["stages"][0]
     talker["default_sampling_params"] |= sampling
     if "temperature" in sampling:

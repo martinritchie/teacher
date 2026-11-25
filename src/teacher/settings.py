@@ -9,6 +9,11 @@ SCRIPT_MODEL = "Qwen/Qwen3-14B-AWQ"
 VOICE_MODEL = "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice"
 VOICE_CLONE_MODEL = "Qwen/Qwen3-TTS-12Hz-1.7B-Base"  # imitates a reference clip (`teacher speak --clone`)
 VOICE = "ryan"
+VOICE_SAMPLING = {
+    "temperature": 0.8,
+    "top_p": 0.85,
+    "top_k": 30,
+}  # with one request per sentence, livelier than the defaults (0.9, 1.0, 50)
 LANGUAGE = "English"
 
 CONTEXT = 16384  # script model window; the largest prompt is about 13k tokens

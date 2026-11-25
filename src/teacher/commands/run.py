@@ -14,7 +14,7 @@ import typer
 from teacher.episode import split_into_chunks, write_episode
 from teacher.llm import record, stage, start_trace
 from teacher.servers import serve_script_model, serve_voice_model
-from teacher.settings import SCRIPT_MODEL, VOICE, VOICE_MODEL
+from teacher.settings import SCRIPT_MODEL, VOICE, VOICE_MODEL, VOICE_SAMPLING
 from teacher.source import read_source
 from teacher.speech import Voice, make_speakable, save, speak
 
@@ -65,7 +65,9 @@ def run(
     if audio:
         with (
             stage("speak"),
-            serve_voice_model(VOICE_MODEL, out / "voice-model.log") as tts,
+            serve_voice_model(
+                VOICE_MODEL, out / "voice-model.log", VOICE_SAMPLING
+            ) as tts,
         ):
             clips = speak(paragraphs, Voice(speaker=voice), tts)
         save(out, paper.name, paragraphs, clips)
