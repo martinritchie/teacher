@@ -9,7 +9,6 @@ description = "Turn ML papers into podcast-style audio with local models"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    "anthropic>=0.108,<1",
     "en-core-web-sm",
     "jinja2>=3.1",
     "kokoro>=0.9.4",
