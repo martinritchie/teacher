@@ -15,6 +15,7 @@ from teacher.settings import (
     PAUSE_SECONDS,
     PROMPTS,
     SAMPLE_RATE,
+    SENTENCE_PAUSE_SECONDS,
     WORDS_PER_MINUTE,
 )
 
@@ -62,6 +63,8 @@ class Voice:
     speaker: str = "ryan"
     style: bool = True
     clone: Path | None = None
+    even_pace: bool = True  # stretch every clip to WORDS_PER_MINUTE
+    sentences: bool = False  # one request per sentence, joined with short pauses, not one per paragraph
 
 
 def speak(paragraphs: list[str], voice: Voice, server: str) -> list[np.ndarray]:
@@ -73,18 +76,32 @@ def speak(paragraphs: list[str], voice: Voice, server: str) -> list[np.ndarray]:
         audio = base64.b64encode(voice.clone.read_bytes()).decode()
         request |= {"task_type": "Base", "ref_audio": f"data:audio/wav;base64,{audio}",
                     "ref_text": voice.clone.with_suffix(".txt").read_text().strip()}  # fmt: skip
-    clips = [
+    pieces = [split_sentences(p) if voice.sentences else [p] for p in paragraphs]
+    spoken = iter(
         clip
-        for batch in _batches(paragraphs)
+        for batch in _batches([s for p in pieces for s in p])
         for clip in _synthesise(batch, request, server)
+    )
+    gap = np.zeros(int(SENTENCE_PAUSE_SECONDS * SAMPLE_RATE))
+    clips = [
+        np.concatenate([part for _ in p for part in (next(spoken), gap)][:-1])
+        for p in pieces
     ]
-    return even_out(clips, paragraphs)
+    return even_out(clips, paragraphs, pace=voice.even_pace)
 
 
-def even_out(clips: list[np.ndarray], paragraphs: list[str]) -> list[np.ndarray]:
+def split_sentences(paragraph: str) -> list[str]:
+    """The paragraph's sentences, to speak one at a time: Qwen3-TTS reads long inputs less reliably."""
+    parts = re.split(r"(?<=[.!?])\s+(?=[\"'(]?[A-Z])", paragraph)
+    return [s.strip() for s in parts if s.strip()]
+
+
+def even_out(
+    clips: list[np.ndarray], paragraphs: list[str], pace: bool = True
+) -> list[np.ndarray]:
     """The clips made to sound like one take. Each paragraph is synthesised on its own and comes out with its own
     tone, loudness and pace, so a listener hears every boundary: match each clip's tonal balance and loudness to
-    the episode's median, then stretch it to WORDS_PER_MINUTE."""
+    the episode's median, then, with `pace`, stretch it to WORDS_PER_MINUTE."""
     if not clips or min(len(c) for c in clips) < SAMPLE_RATE // 2:
         return clips  # too short to measure
     from scipy.signal import fftconvolve, firwin2, welch
@@ -121,6 +138,8 @@ def even_out(clips: list[np.ndarray], paragraphs: list[str]) -> list[np.ndarray]
         )
     target = np.median([level(c) for c in out])
     out = [c * target / max(level(c), 1e-9) for c in out]
+    if not pace:
+        return out
     paces = [
         len(t.split()) / (len(c) / SAMPLE_RATE / 60) for c, t in zip(out, paragraphs)
     ]

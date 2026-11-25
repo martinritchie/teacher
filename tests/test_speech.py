@@ -96,3 +96,20 @@ def test_clips_are_evened_out_to_one_loudness_and_pace():
     assert abs(rms[0] - rms[1]) / rms[0] < 0.1
     paces = [len(t.split()) / (len(c) / SAMPLE_RATE / 60) for c, t in zip(even, texts)]
     assert all(abs(p - WORDS_PER_MINUTE) < 2 for p in paces)
+    kept = even_out(
+        clips, texts, pace=False
+    )  # loudness still matched, each clip keeps its own pace
+    assert [len(c) for c in kept] == [len(c) for c in clips]
+
+
+def test_paragraphs_split_into_sentences():
+    from teacher.speech import split_sentences
+
+    assert split_sentences(
+        'It works. Does it? "Yes," he said. Version 2.5 is out.'
+    ) == [
+        "It works.",
+        "Does it?",
+        '"Yes," he said.',
+        "Version 2.5 is out.",
+    ]

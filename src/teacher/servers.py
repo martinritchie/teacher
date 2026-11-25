@@ -82,22 +82,22 @@ def claude(model: str) -> Model:
 
 @contextmanager
 def serve_voice_model(
-    model: str, log: Path, temperature: float | None = None
+    model: str, log: Path, sampling: dict | None = None
 ) -> Iterator[str]:
-    """The TTS model on vLLM-Omni's speech server. Yields its base URL. A `temperature` replaces the sampling
-    temperature of both token stages (vLLM-Omni's default for Qwen3-TTS is 0.9), through a copy of its deploy
-    config written next to the log."""
+    """The TTS model on vLLM-Omni's speech server. Yields its base URL. `sampling` (temperature, top_p, top_k,
+    repetition_penalty) replaces those settings of the first token stage, through a copy of its deploy config
+    written next to the log; a temperature applies to both token stages (vLLM-Omni's default for Qwen3-TTS: 0.9)."""
     cmd = ["vllm-omni", "serve", model, "--omni"]
-    if temperature is not None:
+    if sampling:
         cmd += [
             "--deploy-config",
-            str(_tts_config(temperature, log.with_suffix(".deploy.yaml"))),
+            str(_tts_config(sampling, log.with_suffix(".deploy.yaml"))),
         ]
     with vllm_server(cmd, log) as url:
         yield url
 
 
-def _tts_config(temperature: float, path: Path) -> Path:
+def _tts_config(sampling: dict, path: Path) -> Path:
     import vllm_omni
     import yaml
 
@@ -105,8 +105,9 @@ def _tts_config(temperature: float, path: Path) -> Path:
         (Path(vllm_omni.__file__).parent / "deploy" / "qwen3_tts.yaml").read_text()
     )
     talker = config["stages"][0]
-    talker["default_sampling_params"]["temperature"] = temperature
-    talker["subtalker_sampling_params"]["temperature"] = temperature
+    talker["default_sampling_params"] |= sampling
+    if "temperature" in sampling:
+        talker["subtalker_sampling_params"]["temperature"] = sampling["temperature"]
     path.write_text(yaml.safe_dump(config, sort_keys=False))
     return path
 

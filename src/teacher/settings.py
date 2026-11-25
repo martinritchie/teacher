@@ -15,6 +15,9 @@ CONTEXT = 16384  # script model window; the largest prompt is about 13k tokens
 WORDS_PER_MINUTE = 120  # speaking pace: every clip is stretched to it, and scripts are sized by it for --minutes
 SAMPLE_RATE = 24000
 PAUSE_SECONDS = 0.6  # silence between paragraphs
+SENTENCE_PAUSE_SECONDS = (
+    0.25  # silence between sentences, when each is spoken on its own
+)
 
 PARALLEL = 16  # threads per parallel() call; each model's `parallel` profile setting caps its calls in flight
 

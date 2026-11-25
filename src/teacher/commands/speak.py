@@ -25,9 +25,23 @@ def speak_script(
     temperature: float = typer.Option(
         None, help="Sampling temperature of the TTS model (vLLM-Omni's default: 0.9)"
     ),
+    top_p: float = typer.Option(
+        None, help="Nucleus sampling of the TTS model's first stage (default 1.0)"
+    ),
+    top_k: int = typer.Option(
+        None, help="Top-k sampling of the TTS model's first stage (default 50)"
+    ),
+    sentences: bool = typer.Option(
+        False,
+        help="One TTS request per sentence, joined with short pauses (off: one per paragraph)",
+    ),
     clone: Path = typer.Option(
         None,
         help="A reference WAV, with its transcript in a .txt beside it, for every paragraph to imitate; uses the Base (voice clone) model",
+    ),
+    even_pace: bool = typer.Option(
+        True,
+        help="Stretch every paragraph to WORDS_PER_MINUTE (off: the model's own pace)",
     ),
     out: Path = typer.Option(Path("out/speak"), help="Output directory"),
     name: str = typer.Option(None, help="Output name; defaults to the script's"),
@@ -37,7 +51,22 @@ def speak_script(
     name = name or script.stem
     out.mkdir(parents=True, exist_ok=True)
     model = VOICE_CLONE_MODEL if clone else VOICE_MODEL
-    with serve_voice_model(model, out / f"{name}.voice-model.log", temperature) as tts:
-        clips = speak(paragraphs, Voice(speaker=voice, style=style, clone=clone), tts)
+    sampling = {
+        k: v
+        for k, v in dict(temperature=temperature, top_p=top_p, top_k=top_k).items()
+        if v is not None
+    }
+    with serve_voice_model(model, out / f"{name}.voice-model.log", sampling) as tts:
+        clips = speak(
+            paragraphs,
+            Voice(
+                speaker=voice,
+                style=style,
+                clone=clone,
+                even_pace=even_pace,
+                sentences=sentences,
+            ),
+            tts,
+        )
     save(out, name, paragraphs, clips)
     typer.echo(f"Wrote {out / name}.mp3 and {len(clips)} clips in {out / name}.clips/")
