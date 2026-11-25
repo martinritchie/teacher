@@ -81,40 +81,6 @@ def claude(model: str) -> Model:
 
 
 @contextmanager
-def serve_voice_model(
-    model: str, log: Path, sampling: dict | None = None
-) -> Iterator[str]:
-    """The TTS model on vLLM-Omni's speech server. Yields its base URL. `sampling` (temperature, top_p, top_k,
-    repetition_penalty) replaces those settings of the first token stage, through a copy of its deploy config
-    written next to the log; a temperature applies to both token stages (vLLM-Omni's default for Qwen3-TTS: 0.9)."""
-    cmd = ["vllm-omni", "serve", model, "--omni"]
-    if sampling:
-        cmd += [
-            "--deploy-config",
-            str(_tts_config(sampling, log.with_suffix(".deploy.yaml"))),
-        ]
-    with vllm_server(cmd, log) as url:
-        yield url
-
-
-def _tts_config(sampling: dict, path: Path) -> Path:
-    from importlib.util import find_spec
-
-    import yaml
-
-    package = Path(
-        find_spec("vllm_omni").origin
-    ).parent  # found, not imported: importing it loads torch
-    config = yaml.safe_load((package / "deploy" / "qwen3_tts.yaml").read_text())
-    talker = config["stages"][0]
-    talker["default_sampling_params"] |= sampling
-    if "temperature" in sampling:
-        talker["subtalker_sampling_params"]["temperature"] = sampling["temperature"]
-    path.write_text(yaml.safe_dump(config, sort_keys=False))
-    return path
-
-
-@contextmanager
 def vllm_server(cmd: list[str], log: Path, port: int | None = None) -> Iterator[str]:
     """Run `cmd` (a vLLM server) on `port`, or a free one, for the length of
     the block; yields its URL. The server is stopped however the block ends, including on SIGTERM or SIGHUP (a

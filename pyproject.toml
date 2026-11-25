@@ -10,15 +10,18 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "anthropic>=0.108,<1",
+    "en-core-web-sm",
     "jinja2>=3.1",
+    "kokoro>=0.9.4",
     "mineru[full]>=4.2",
     "num2words>=0.5.14",
     "pydantic-ai-slim[anthropic,openai]>=2.31.1",
+    "scipy>=1.17.1",
     "semchunk>=4.1",
     "soundfile>=0.14.0",
     "trafilatura>=2.3.1",
     "typer>=0.20.0",
-    "vllm-omni==0.30.0",
+    "vllm==0.30.0",
 ]
 
 [project.scripts]
@@ -27,6 +30,9 @@ teacher = "teacher.cli:main"
 [tool.uv]
 package = true
 environments = ["sys_platform == 'linux'"]
+
+[tool.uv.sources]
+en-core-web-sm = { url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl" }
 
 [dependency-groups]
 dev = [

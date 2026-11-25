@@ -6,25 +6,16 @@ from pathlib import Path
 PROMPTS = Path(__file__).parent / "prompts"
 
 SCRIPT_MODEL = "Qwen/Qwen3-14B-AWQ"
-VOICE_MODEL = "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice"
-VOICE_CLONE_MODEL = "Qwen/Qwen3-TTS-12Hz-1.7B-Base"  # imitates a reference clip (`teacher speak --clone`)
-VOICE = "ryan"
-VOICE_SAMPLING = {
-    "temperature": 0.8,
-    "top_p": 0.85,
-    "top_k": 30,
-}  # with one request per sentence, livelier than the defaults (0.9, 1.0, 50)
-LANGUAGE = "English"
-
+VOICE_MODEL = "hexgrad/Kokoro-82M"  # Apache-2.0, 82M parameters, runs in-process
+VOICE = "am_michael"  # a Kokoro voice: American male
 CONTEXT = 16384  # script model window; the largest prompt is about 13k tokens
-WORDS_PER_MINUTE = 120  # speaking pace: every clip is stretched to it, and scripts are sized by it for --minutes
+WORDS_PER_MINUTE = (
+    140  # Kokoro's pace at speed 1 (am_michael); scripts are sized by it for --minutes
+)
 SAMPLE_RATE = 24000
 PAUSE_SECONDS = 0.6  # silence between paragraphs
 CHAPTER_PAUSE_SECONDS = 1.5  # silence before a new chapter
 MIN_FREE_GPU_GIB = 15  # the script model peaks at about 14 GiB (weights 9.4, KV cache 3.5, CUDA graphs)
-SENTENCE_PAUSE_SECONDS = (
-    0.25  # silence between sentences, when each is spoken on its own
-)
 
 PARALLEL = 16  # threads per parallel() call; each model's `parallel` profile setting caps its calls in flight
 

@@ -28,7 +28,7 @@ Everything runs locally on one NVIDIA GPU (developed on an RTX 5070 Ti, 16 GB), 
    - **Authors**: from the text of the PDF's first page (pdfium, not MinerU, so first-page footnotes are kept) or a post's byline, the authors grouped by institution, and anyone the front page explicitly thanks. A name not on the page is sent back.
    - **Contributions**: from what was heard, the paper's introduction and conclusion, each contribution in plain English (the problem, what was done before, what is new), for a listener who knows ML but not the subfield.
    - **How it works**, so that the listener could implement it. The source is split at its headings into sections ([semchunk](https://github.com/isaacus-dev/semchunk) splits any over `--chunk` tokens); a note-taker summarises each, and a planner (thinking on) outlines the method as a glossary of plain names and two to seven components, each naming the sections it draws on. For each component, a detailer (thinking on) rewrites its inputs, steps and outputs from the full text of those sections, and one part, its own chapter, is written from it. Numbers in digits are spelled out in code (`spell_numbers`); a part that still has a word with a symbol in it (such as 1/n) is rewritten once. A round-trip check, in which a listener writes pseudocode from the narration alone and a checker compares it with the source, is off by default (`CHECK_PARTS` in `part.py`): see [The part loop](#the-part-loop).
-3. **Speak**: [Qwen3-TTS](https://huggingface.co/Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice) (1.7B, Apache-2.0) on a [vLLM-Omni](https://github.com/vllm-project/vllm-omni) server reads the script one sentence per request (Qwen3-TTS reads long inputs flatter and less reliably), with short pauses between sentences, as the preset speaker Ryan with a short style instruction for warm, varied intonation (`prompts/voice.md`; `--no-style` drops it). It samples with temperature 0.8, top_p 0.85 and top_k 30 (`VOICE_SAMPLING`), the settings shared in community guides; on their own neither change sounded better, but together they sounded clearly livelier than paragraphs at the defaults. Each paragraph comes out with its own loudness and tone, so `even_out` then matches every clip's tonal balance and loudness to the episode's median. `teacher speak --even-pace` also stretches each paragraph to `WORDS_PER_MINUTE` (120). The script is Markdown with a `## ` heading per chapter; the MP3 gets a longer pause before each chapter and an ID3 chapter table (`CHAP` frames), which podcast apps show and skip between.
+3. **Speak**: [Kokoro](https://huggingface.co/hexgrad/Kokoro-82M) (82M, Apache-2.0) reads each paragraph in-process, on the GPU (about 15 seconds for an episode, model load included; on a CPU about 4 times real time), with the preset voice `am_michael` (`--voice`). Nothing about the voice is sampled, so it stays the same from paragraph to paragraph: on the Jeva episode its pitch varied 0.8 semitones from phrase to phrase, against 2.0 for the Qwen3-TTS voice it replaced, which drifted between requests. The script is Markdown with a `## ` heading per chapter; the MP3 gets a longer pause before each chapter and an ID3 chapter table (`CHAP` frames), which podcast apps show and skip between.
 
 ### Models and agents
 
@@ -84,7 +84,7 @@ Both diagrams are drawn in [Excalidraw](https://excalidraw.com). Each SVG in `do
 | `judge.py` | The fact judge for `eval`, and the check that its quote is in the narration |
 | `llm.py` | Talking to the model: `agent(name)`, `ask` (one traced call), `ask_until` (ask, check, ask again with the problems), `parallel` |
 | `speech.py` | Strip markup into paragraphs and chapters, synthesise them, write `.md` and `.mp3` with chapter marks; the check for words TTS reads badly |
-| `servers.py` | Start a vLLM or vLLM-Omni server for the length of a `with` block, or use a running one |
+| `servers.py` | Start a vLLM server for the length of a `with` block, or use a running one |
 | `settings.py` | Models, limits, server flags, sampling, parallelism, environment |
 
 ## Prompts
@@ -98,7 +98,6 @@ Everything the models see is in `src/teacher/prompts/`, as [Jinja2](https://jinj
 | `tree/` | `splitter`, `note_taker`, `notes_verifier` | `outline`, `write`, `eval` |
 | `part/` | `writer`, `listener`, `checker` | `run`, `write`, `eval` |
 | `eval/` | `judge` | `eval` |
-| `voice.md` | the speaking-style instruction for TTS, sent to preset speakers | `run`, `speak` |
 
 ## Usage
 
@@ -125,7 +124,7 @@ The workflow never runs for pull requests, since code from a fork must not run o
 | Option | Default | |
 |---|---|---|
 | `--model` | `Qwen/Qwen3-14B-AWQ` | The script model: a Hugging Face model that vLLM serves, or `claude-*` on the Anthropic API (see [Models](#models)) |
-| `--voice` | `ryan` | Qwen3-TTS speaker; `aiden` is the other native English voice |
+| `--voice` | `am_michael` | Kokoro voice; the first letter is the accent (`a` American, `b` British), e.g. `am_fenrir`, `bm_george`, `bm_lewis` |
 | `--minutes` | `25` | Upper limit on the length of the audio. Each method part's word target comes from the outline (capped at 300 words) and only shrinks if the total does not fit |
 | `--chunk` | `4000` | Max source tokens per section; longer sections are split. Lower it if vLLM rejects a call as too long |
 | `--no-audio` | off | Stop after the script |
@@ -159,7 +158,7 @@ Everything a command writes goes under `out/`, which git ignores:
 | `out/outline/<name>.outline.md`, `.json` | `outline` | The nested headings; the tree with each node's text |
 | `out/write/<name>.<node>.md` | `write` | The narration of one node |
 | `out/eval/<time>.md` | `eval` | The score table, each narration, and each fact's verdict with the judge's quote |
-| `out/<command>/script-model.log`, `voice-model.log`, `out/serve.log` | servers | vLLM logs |
+| `out/<command>/script-model.log`, `out/serve.log` | servers | vLLM logs |
 
 ## Setup
 
@@ -191,7 +190,7 @@ The judge was chosen with `teacher judge-bench`, which replays 883 verdicts Clau
 
 ```bash
 make test             # unit tests: under 2 seconds, offline, no GPU
-make test-functional  # functional tests: real MinerU, Qwen3-TTS, tokenizer and server processes; minutes, on the GPU
+make test-functional  # functional tests: real MinerU, Kokoro, tokenizer and server processes; minutes, on the GPU
 make test-all         # both
 make coverage         # unit tests with a coverage report: missing lines in the terminal, and htmlcov/index.html
 make check            # ruff format and lint

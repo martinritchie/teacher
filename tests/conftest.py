@@ -190,10 +190,8 @@ def _llm(monkeypatch):
 def _tts(monkeypatch):
     calls = []
 
-    def speak(paragraphs, voice, server):
-        calls.append(
-            SimpleNamespace(script="\n\n".join(paragraphs), voice=voice.speaker)
-        )
+    def speak(paragraphs, voice):
+        calls.append(SimpleNamespace(script="\n\n".join(paragraphs), voice=voice.name))
         return [
             np.zeros(SAMPLE_RATE // 100) for _ in paragraphs
         ]  # a short MP3 encodes quickly
