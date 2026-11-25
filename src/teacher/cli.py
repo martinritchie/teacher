@@ -2,6 +2,7 @@
 
 import typer
 
+from teacher.commands.episodes import episodes
 from teacher.commands.evaluate import evaluate
 from teacher.commands.hear import hear_clips
 from teacher.commands.judge_bench import judge_bench
@@ -21,6 +22,7 @@ app.command()(serve)
 app.command(name="speak")(speak_script)
 app.command(name="hear")(hear_clips)
 app.command(name="judge-bench")(judge_bench)
+app.command()(episodes)
 
 if __name__ == "__main__":
     app()

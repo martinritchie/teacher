@@ -20,6 +20,7 @@ CONTEXT = 16384  # script model window; the largest prompt is about 13k tokens
 WORDS_PER_MINUTE = 120  # speaking pace: every clip is stretched to it, and scripts are sized by it for --minutes
 SAMPLE_RATE = 24000
 PAUSE_SECONDS = 0.6  # silence between paragraphs
+CHAPTER_PAUSE_SECONDS = 1.5  # silence before a new chapter
 SENTENCE_PAUSE_SECONDS = (
     0.25  # silence between sentences, when each is spoken on its own
 )

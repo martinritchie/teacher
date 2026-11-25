@@ -8,7 +8,7 @@ I am a busy parent, this helps me keep on top of reading: doing the dishes, driv
 
 ## Example episodes
 
-Two episodes made entirely on one local GPU with the default settings (`uv run teacher run <pdf>`): no API calls. Each is the abstract read for the ear, the contributions in plain English, then how the method works.
+Two episodes made entirely on one local GPU with the default settings (`uv run teacher run <pdf>`): no API calls. Each opens with what the work is about, in the episode's own words, then who wrote it, the contributions in plain English, and how the method works. Each of these is a chapter, which podcast apps show and skip between.
 
 | Paper | Listen | Script |
 |---|---|---|
@@ -23,10 +23,11 @@ Everything runs locally on one NVIDIA GPU (developed on an RTX 5070 Ti, 16 GB), 
 
 1. **Read**: a PDF goes through [MinerU](https://github.com/opendatalab/MinerU). It finds the page layout, then its `MinerU2.5-Pro` 1.2B vision model, on an in-process [vLLM](https://github.com/vllm-project/vllm) engine, reads each region. The result is Markdown with LaTeX equations, HTML tables and algorithm boxes; figures are dropped but their captions kept. Blog posts go through [trafilatura](https://github.com/adbar/trafilatura). Everything from the references on is cut (which, for now, includes any appendix).
 2. **Write**: a `vllm serve` subprocess runs the script model (Qwen3-14B-AWQ), and [Pydantic AI](https://ai.pydantic.dev) agents write the script. Each agent is one fixed system prompt and a typed output, used for single-turn calls; plain Python decides what to call next. Independent calls run in parallel (`PARALLEL` in `settings.py`) so vLLM can batch them. The episode has three parts, each given everything the listener has already heard, so it builds on it instead of repeating it:
-   - **Abstract**: the text under the abstract heading, transcribed for the ear: symbols, numbers and acronyms in spoken form, nothing else changed. A transcription that keeps under 80% of the original words, or keeps symbols, is made again.
-   - **Contributions**: from the abstract, introduction and conclusion, each contribution in plain English (the problem, what was done before, what is new), for a listener who knows ML but not the subfield.
-   - **How it works**, so that the listener could implement it. The source is split at its headings into sections ([semchunk](https://github.com/isaacus-dev/semchunk) splits any over `--chunk` tokens); a note-taker summarises each, and a planner (thinking on) outlines the method as a glossary of plain names and two to seven components, each naming the sections it draws on. For each component, a detailer (thinking on) rewrites its inputs, steps and outputs from the full text of those sections, and one part is written from it. Numbers in digits are spelled out in code (`spell_numbers`); a part that still has a word with a symbol in it (such as 1/n) is rewritten once. A round-trip check, in which a listener writes pseudocode from the narration alone and a checker compares it with the source, is off by default (`CHECK_PARTS` in `part.py`): see [The part loop](#the-part-loop).
-3. **Speak**: [Qwen3-TTS](https://huggingface.co/Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice) (1.7B, Apache-2.0) on a [vLLM-Omni](https://github.com/vllm-project/vllm-omni) server reads the script one sentence per request (Qwen3-TTS reads long inputs flatter and less reliably), with short pauses between sentences, as the preset speaker Ryan with a short style instruction for warm, varied intonation (`prompts/voice.md`; `--no-style` drops it). It samples with temperature 0.8, top_p 0.85 and top_k 30 (`VOICE_SAMPLING`), the settings shared in community guides; on their own neither change sounded better, but together they sounded clearly livelier than paragraphs at the defaults. Each paragraph comes out with its own loudness and tone, so `even_out` then matches every clip's tonal balance and loudness to the episode's median. `teacher speak --even-pace` also stretches each paragraph to `WORDS_PER_MINUTE` (120).
+   - **Introduction**: what the work is about, the idea at its heart and what it shows, paraphrased from the abstract (or, for a blog post, its opening). An abstract is the authors' own text, so it is never read out: an introduction that copies eight or more of its words in a row is written again.
+   - **Authors**: from the text of the PDF's first page (pdfium, not MinerU, so first-page footnotes are kept) or a post's byline, the authors grouped by institution, and anyone the front page explicitly thanks. A name not on the page is sent back.
+   - **Contributions**: from what was heard, the paper's introduction and conclusion, each contribution in plain English (the problem, what was done before, what is new), for a listener who knows ML but not the subfield.
+   - **How it works**, so that the listener could implement it. The source is split at its headings into sections ([semchunk](https://github.com/isaacus-dev/semchunk) splits any over `--chunk` tokens); a note-taker summarises each, and a planner (thinking on) outlines the method as a glossary of plain names and two to seven components, each naming the sections it draws on. For each component, a detailer (thinking on) rewrites its inputs, steps and outputs from the full text of those sections, and one part, its own chapter, is written from it. Numbers in digits are spelled out in code (`spell_numbers`); a part that still has a word with a symbol in it (such as 1/n) is rewritten once. A round-trip check, in which a listener writes pseudocode from the narration alone and a checker compares it with the source, is off by default (`CHECK_PARTS` in `part.py`): see [The part loop](#the-part-loop).
+3. **Speak**: [Qwen3-TTS](https://huggingface.co/Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice) (1.7B, Apache-2.0) on a [vLLM-Omni](https://github.com/vllm-project/vllm-omni) server reads the script one sentence per request (Qwen3-TTS reads long inputs flatter and less reliably), with short pauses between sentences, as the preset speaker Ryan with a short style instruction for warm, varied intonation (`prompts/voice.md`; `--no-style` drops it). It samples with temperature 0.8, top_p 0.85 and top_k 30 (`VOICE_SAMPLING`), the settings shared in community guides; on their own neither change sounded better, but together they sounded clearly livelier than paragraphs at the defaults. Each paragraph comes out with its own loudness and tone, so `even_out` then matches every clip's tonal balance and loudness to the episode's median. `teacher speak --even-pace` also stretches each paragraph to `WORDS_PER_MINUTE` (120). The script is Markdown with a `## ` heading per chapter; the MP3 gets a longer pause before each chapter and an ID3 chapter table (`CHAP` frames), which podcast apps show and skip between.
 
 ### Models and agents
 
@@ -44,7 +45,8 @@ Both diagrams are drawn in [Excalidraw](https://excalidraw.com). Each SVG in `do
 
 | Agent | Prompt | Mode | Output |
 |---|---|---|---|
-| Abstract reader | `episode/abstract` | writing | `Abstract` |
+| Introduction writer | `episode/introduction` | writing | `Introduction` |
+| Credits reader | `episode/credits` | writing | `Credits` |
 | Contributions writer | `episode/contributions` | writing | `Contributions` |
 | Section notes | `plan/section_notes` | writing | text |
 | Planner | `plan/planner` | thinking | `Method` |
@@ -73,14 +75,14 @@ Both diagrams are drawn in [Excalidraw](https://excalidraw.com). Each SVG in `do
 
 | Module | Does |
 |---|---|
-| `commands/` | `run`, `outline`, `write`, `eval` (`evaluate.py`) and `serve`: options, files in and out, nothing else |
-| `source.py` | Fetch a path or URL, convert a PDF (MinerU), HTML (trafilatura) or Markdown file, cut the references |
-| `episode.py` | The `run` script: chunking, abstract, contributions, then notes → planner → detailer → a checked part per component |
+| `commands/` | `run`, `episodes`, `outline`, `write`, `eval` (`evaluate.py`) and `serve`: options, files in and out, nothing else |
+| `source.py` | Fetch a path or URL, convert a PDF (MinerU), HTML (trafilatura) or Markdown file, cut the references; the first page's text, for the authors |
+| `episode.py` | The `run` script, in chapters: chunking, introduction, authors, contributions, then notes → planner → detailer → a checked part per component |
 | `tree.py` | The outline tree: top-level sections, recursive splitting, the notes loop, narrating a node |
 | `part.py` | One spoken part, shared by both: writer, numbers spelled in code, one rewrite if symbols remain (listener and checker behind `CHECK_PARTS`); the `Brief` it is written from |
 | `judge.py` | The fact judge for `eval`, and the check that its quote is in the narration |
 | `llm.py` | Talking to the model: `agent(name)`, `ask` (one traced call), `ask_until` (ask, check, ask again with the problems), `parallel` |
-| `speech.py` | Strip markup into paragraphs, synthesise them, write `.md` and `.mp3`; the check for words TTS reads badly |
+| `speech.py` | Strip markup into paragraphs and chapters, synthesise them, write `.md` and `.mp3` with chapter marks; the check for words TTS reads badly |
 | `servers.py` | Start a vLLM or vLLM-Omni server for the length of a `with` block, or use a running one |
 | `settings.py` | Models, limits, server flags, sampling, parallelism, environment |
 
@@ -90,7 +92,7 @@ Everything the models see is in `src/teacher/prompts/`, as [Jinja2](https://jinj
 
 | Folder | Agents | Used by |
 |---|---|---|
-| `episode/` | `abstract` reader, `contributions` writer | `run` |
+| `episode/` | `introduction` writer, `credits` reader, `contributions` writer | `run` |
 | `plan/` | `section_notes`, `planner`, `detailer` | `run` |
 | `tree/` | `splitter`, `note_taker`, `notes_verifier` | `outline`, `write`, `eval` |
 | `part/` | `writer`, `listener`, `checker` | `run`, `write`, `eval` |
@@ -105,6 +107,10 @@ uv run teacher run paper.pdf --no-audio                             # script onl
 ```
 
 `teacher run` takes a PDF path, PDF URL, arXiv abs URL or blog post URL.
+
+### Requesting an episode
+
+[`episodes/episodes.bib`](episodes/episodes.bib) is the show's list of papers. To request an episode, add its BibTeX citation there (the arXiv page's "Export BibTeX Citation" gives one) and merge it. `uv run teacher episodes` then makes an episode for every entry without `episodes/<key>.mp3`, read from its arXiv `eprint`, else its `url`, else its `doi`, and copies the script and MP3 in as `episodes/<key>.md` and `.mp3`. `--dry-run` lists what it would make.
 
 | Option | Default | |
 |---|---|---|

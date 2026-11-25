@@ -22,7 +22,7 @@ def test_every_call_is_traced(episode_run):
     trace = (out / f"{PDF.stem}.trace.jsonl").read_text().splitlines()
     lines = [json.loads(line) for line in trace if '"call"' in line]
     assert [line["prompt"] for line in lines] == [c.prompt for c in llm]
-    assert lines[0]["call"] == "episode/abstract" and "text" in lines[0]["output"]
+    assert lines[0]["call"] == "episode/introduction" and "text" in lines[0]["output"]
 
 
 def test_the_trace_records_tokens_and_the_time_of_each_stage(episode_run):

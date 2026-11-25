@@ -33,6 +33,8 @@ from teacher.settings import (
 )
 from teacher.testing import (
     CONTRIBUTIONS,
+    CREDITS,
+    INTRODUCTION,
     SHORT_MARKDOWN,
     PDF,
     PHASES,
@@ -116,7 +118,13 @@ def _unit(monkeypatch):
 
 def _llm(monkeypatch):
     calls = Calls()
-    calls.verdicts, calls.abstracts, calls.parts, calls.contributions = [], [], [], []
+    calls.verdicts, calls.introductions, calls.parts, calls.contributions = (
+        [],
+        [],
+        [],
+        [],
+    )
+    calls.credits = []
     calls.details, calls.splits, calls.verdict, calls.started = [], {}, "stated", 0
     calls.gaps, calls.quote, calls.unsupported = [], None, []
     calls.settings, calls.components = {}, None
@@ -135,7 +143,8 @@ def _llm(monkeypatch):
             component(1, list(range(1, n + 1)))
         ]  # one, to keep the calls few
         text = {
-            "abstract": lambda: json.dumps({"text": calls.abstracts.pop(0) if calls.abstracts else block(prompt, "abstract")}),
+            "introduction": lambda: json.dumps({"text": calls.introductions.pop(0) if calls.introductions else INTRODUCTION}),
+            "credits": lambda: json.dumps(calls.credits.pop(0) if calls.credits else CREDITS),
             "contributions": lambda: json.dumps(calls.contributions.pop(0) if calls.contributions else CONTRIBUTIONS),
             "notes": lambda: f"Notes {k}.",
             "outline": lambda: json.dumps(method(components)),

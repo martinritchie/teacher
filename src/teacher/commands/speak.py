@@ -7,7 +7,7 @@ import typer
 
 from teacher.servers import serve_voice_model
 from teacher.settings import VOICE, VOICE_CLONE_MODEL, VOICE_MODEL, VOICE_SAMPLING
-from teacher.speech import Voice, save, speak
+from teacher.speech import Voice, chapters, make_speakable, save, speak
 
 
 def speak_script(
@@ -50,7 +50,8 @@ def speak_script(
     name: str = typer.Option(None, help="Output name; defaults to the script's"),
 ):
     """Speak <script> into <out>/<name>.mp3, with one WAV per paragraph in <out>/<name>.clips/."""
-    paragraphs = [p.strip() for p in script.read_text().split("\n\n") if p.strip()]
+    text = script.read_text()
+    paragraphs = make_speakable(text)
     name = name or script.stem
     out.mkdir(parents=True, exist_ok=True)
     model = VOICE_CLONE_MODEL if clone else VOICE_MODEL
@@ -67,5 +68,5 @@ def speak_script(
             ),
             tts,
         )
-    save(out, name, paragraphs, clips)
+    save(out, name, paragraphs, clips, chapters(text))
     typer.echo(f"Wrote {out / name}.mp3 and {len(clips)} clips in {out / name}.clips/")

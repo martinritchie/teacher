@@ -26,7 +26,7 @@ SHORT_MARKDOWN = (
 SMALL_MODEL = "Qwen/Qwen3-0.6B"  # only its tokenizer is downloaded
 
 
-PHASES = {"# Abstract Reader": "abstract", "# Contributions Writer": "contributions", "# Notes Writer": "notes", "# Method Planner": "outline", "# Component Detailer": "detail", "# Method Writer": "method", "# Listener": "reconstruct", "# Method Checker": "check", "# Section Splitter": "split", "# Fact Judge": "judge", "# Leaf Note Taker": "leaf notes", "# Notes Verifier": "notes check", "# Grounding Checker": "grounding"}  # fmt: skip
+PHASES = {"# Introduction Writer": "introduction", "# Credits Reader": "credits", "# Contributions Writer": "contributions", "# Notes Writer": "notes", "# Method Planner": "outline", "# Component Detailer": "detail", "# Method Writer": "method", "# Listener": "reconstruct", "# Method Checker": "check", "# Section Splitter": "split", "# Fact Judge": "judge", "# Leaf Note Taker": "leaf notes", "# Notes Verifier": "notes check", "# Grounding Checker": "grounding"}  # fmt: skip
 
 
 DIGITS = "zero one two three four five six seven eight nine".split()
@@ -37,6 +37,10 @@ def spelled(k):
     return " ".join(DIGITS[int(d)] for d in str(k))
 
 
+INTRODUCTION = "An introduction in other words."
+CREDITS = {"affiliations": [{"institution": "WeChat AI, at Tencent", "authors": ["Chenze Shao", "Darren Li"]},
+                            {"institution": "Tsinghua University", "authors": ["Darren Li"]}], "thanks": ""}  # fmt: skip
+AUTHORS = "Chenze Shao and Darren Li are at WeChat AI, at Tencent. Darren Li is also at Tsinghua University."
 CONTRIBUTIONS = {"context": "Context.", "items": [{"problem": "Problem.", "before": "Before.", "new": "New."}]}  # fmt: skip
 
 
@@ -55,7 +59,8 @@ class Calls(list):
     """Recorded model calls, plus controls for the stub."""
 
     verdicts: list[list[str]] = []  # problems for the check calls, in order
-    abstracts: list[str] = []  # abstract replies; default echoes the abstract
+    introductions: list[str] = []  # introduction replies; default INTRODUCTION
+    credits: list[dict] = []  # credits replies; default CREDITS
     contributions: list[dict] = []  # contributions replies; default CONTRIBUTIONS
     details: list = []  # detail replies (a string is invalid output); default "Detailed step k."
     splits: dict = {}  # section title -> [(title, starts_with)]; "*" for every section; default none

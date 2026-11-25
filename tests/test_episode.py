@@ -3,23 +3,28 @@
 Flow under test:
 1. Load the source (PDF path, PDF URL, arXiv URL, or blog post URL).
 2. Split it into chunks of at most --chunk tokens.
-3. Abstract: the text under the abstract heading, transcribed for the ear (prompts/episode/abstract.md). A transcription that keeps too few of the original words is made again, once.
-4. Contributions: from the abstract as heard, the introduction and the conclusion (prompts/episode/contributions.md).
+3. Introduction: the abstract in other words (prompts/episode/introduction.md); one that copies a run of the abstract is written again, once.
+4. Authors by institution, and any thanks, from the front page (prompts/episode/credits.md).
+5. Contributions: from what was heard, the introduction and the conclusion (prompts/episode/contributions.md).
 5. Notes on each chunk (prompts/plan/section_notes.md), then an outline of the method, with thinking on, from every note and what was heard (prompts/plan/planner.md).
 6. For each component of the outline:
    a. A detailer, with thinking on, rewrites the component's purpose, inputs, steps and outputs from the full text of its sections (prompts/plan/detailer.md).
    b. Write one spoken part from the outline, the detailed component, its sections, what was heard and the last sentences of the previous part (prompts/part/writer.md).
    c. A listener writes pseudocode from the narration alone (prompts/part/listener.md).
    d. A checker, with thinking on, compares the pseudocode with the component and its source (prompts/part/checker.md). If there are problems, write the part again with them. One rewrite at most.
-7. Join abstract, contributions, an overview sentence and the parts; remove markup, split into paragraphs, and speak."""
+7. Join the chapters (introduction, authors, contributions, then the overview sentence and one part per component) as Markdown under `## ` headings; remove markup, split into paragraphs, and speak."""
 
 import pytest
 
 import teacher.episode as episode
 
 from teacher.settings import SCRIPT_MODEL, WORDS_PER_MINUTE
+from teacher.speech import chapters
 from teacher.testing import (
+    AUTHORS,
     CONTRIBUTIONS,
+    CREDITS,
+    INTRODUCTION,
     PDF,
     PDF_MARKDOWN,
     SMALL_MODEL,
@@ -69,54 +74,74 @@ def test_chunks_are_the_sources_sections(episode_run):
     assert 'heading="2 AUTOENCODER / 2.1 HIGH-FIDELITY RECONSTRUCTION"' in outline
 
 
-def test_abstract_then_contributions_then_how_it_works(llm, tts, tmp_path):
-    """The script is the abstract, the contributions, a sentence naming the method's pieces, then one part per piece."""
+def test_introduction_authors_contributions_then_how_it_works(llm, tts, tmp_path):
+    """The script is an introduction, the authors, the contributions, a sentence naming the method's pieces, then
+    one part per piece, each a chapter."""
     llm.components = [component(1, [1]), component(2, [3])]
     run(PDF, "--out", tmp_path)
-    script = paragraphs(tts)
     overview = "Here is how it works. The method has two pieces: piece 1 and piece 2."
-    tail = [
-        "Context.",
-        "Problem. Before. New.",
-        overview,
-        "Part one.",
-        "Part two.",
-    ]
-    assert script[-5:] == tail and len(script) > 5
+    assert paragraphs(tts) == [INTRODUCTION, AUTHORS, "Context.", "Problem. Before. New.", overview, "Part one.", "Part two."]  # fmt: skip
+    script = (tmp_path / f"{PDF.stem}.md").read_text()
+    assert chapters(script) == [("Introduction", 0), ("Authors", 1), ("Contributions", 2), ("Piece 1", 4), ("Piece 2", 6)]  # fmt: skip
 
 
-def test_abstract_is_transcribed_from_the_abstract_alone(episode_run):
-    """The abstract reader sees only the text under the abstract heading, and its transcription opens the script."""
-    llm, tts = episode_run.llm, episode_run.tts
-    abstract = block(llm.of("abstract")[0].prompt, "abstract")
+def test_introduction_is_written_from_the_abstract_alone(episode_run):
+    """The introducer sees only the text under the abstract heading."""
+    abstract = block(episode_run.llm.of("introduction")[0].prompt, "abstract")
     assert "continuous" in abstract.lower() and "introduction" not in abstract.lower()
-    assert paragraphs(tts)[0].split()[:5] == abstract.split()[:5]
 
 
-def test_abstract_that_strays_is_transcribed_again(llm, tts, tmp_path):
-    """A transcription that keeps too few of the abstract's words is made again, once, told why."""
-    llm.abstracts = ["Something else entirely."]
+def test_introduction_that_copies_the_abstract_is_written_again(llm, tts, tmp_path):
+    """The abstract is the authors' text: an introduction that copies eight of its words in a row is written
+    again, once, told which, and the copy is never spoken."""
+    copy = "We argue that overcoming this bottleneck requires a new design axis for LLM scaling."
+    llm.introductions = [copy]
     run(PDF, "--out", tmp_path)
-    assert len(llm.of("abstract")) == 2
-    assert "Keep every sentence" in block(llm.of("abstract")[1].prompt, "problems")
-    assert "Something else" not in tts[0].script
+    first, second = llm.of("introduction")
+    assert "copied from the abstract" in block(second.prompt, "problems")
+    assert block(second.prompt, "draft") == copy and copy not in tts[0].script
 
 
-def test_abstract_with_symbols_is_transcribed_again(llm, tts, tmp_path):
-    """Words with digits or symbols left in the transcription go back as a problem."""
-    run(
-        PDF, "--out", tmp_path, "--no-audio"
-    )  # the stub echoes the abstract, which says 99.9%
-    first, second = llm.of("abstract")
-    assert "<problems>" not in first.prompt and "<draft>" not in first.prompt
-    assert "99.9%" in block(second.prompt, "problems")
-    assert block(second.prompt, "draft") == block(
-        first.prompt, "abstract"
-    )  # the version to fix
+def test_introduction_that_announces_itself_is_written_again(llm, tts, tmp_path):
+    """Every word is spoken, so a line that announces the introduction sends it back."""
+    llm.introductions = [
+        "Here is the introduction for the research:\n\nLanguage models write one token at a time."
+    ]
+    run(PDF, "--out", tmp_path, "--no-audio")
+    assert "Here is the introduction" in block(
+        llm.of("introduction")[1].prompt, "problems"
+    )
 
 
-def test_contributions_see_the_abstract_introduction_and_conclusion(episode_run):
-    """The contributions writer hears the abstract as spoken and reads the introduction and the conclusion."""
+def test_authors_are_read_by_institution_from_the_front_page(episode_run):
+    """The credits reader gets the PDF's first page, footnotes included; an author at two institutions is named
+    at both, the second time with "also"."""
+    front = block(episode_run.llm.of("credits")[0].prompt, "front")
+    assert "Chenze Shao" in front and "Corresponding author" in front
+    assert paragraphs(episode_run.tts)[1] == AUTHORS
+
+
+def test_a_name_not_on_the_front_page_is_asked_again(llm, tts, tmp_path):
+    """A name the front page does not print goes back as a problem, once."""
+    llm.credits = [
+        {
+            "affiliations": [{"institution": "Nowhere", "authors": ["Ada Lovelace"]}],
+            "thanks": "",
+        }
+    ]
+    run(PDF, "--out", tmp_path, "--no-audio")
+    assert "Ada Lovelace" in block(llm.of("credits")[1].prompt, "problems")
+
+
+def test_thanks_are_said_only_if_the_front_page_thanks_someone(llm, tts, tmp_path):
+    """The CALM front page thanks no one, so a thanks the model offers anyway is not spoken."""
+    llm.credits = [{**CREDITS, "thanks": "The authors thank their cat."}]
+    run(PDF, "--out", tmp_path)
+    assert "cat" not in tts[0].script
+
+
+def test_contributions_see_what_was_heard_the_introduction_and_conclusion(episode_run):
+    """The contributions writer hears the introduction and reads the paper's introduction and conclusion."""
     llm, tts = episode_run.llm, episode_run.tts
     prompt = llm.of("contributions")[0].prompt
     assert paragraphs(tts)[0] in block(prompt, "heard")
@@ -204,11 +229,11 @@ def test_word_targets_come_from_the_outline_capped(llm, tts, tmp_path):
 
 
 def test_minutes_shrinks_the_targets_to_fit(llm, tts, tmp_path):
-    """If the outline's targets do not fit in what is left of --minutes after the abstract and contributions, they shrink in proportion."""
+    """If the outline's targets do not fit in what is left of --minutes after the opening chapters, they shrink in proportion."""
     llm.components = [component(1, [1], 200), component(2, [2], 400)]
-    run(PDF, "--out", tmp_path, "--minutes", 4)
+    run(PDF, "--out", tmp_path, "--minutes", 3)
     heard = " ".join(paragraphs(tts)[:-3])
-    left = 4 * WORDS_PER_MINUTE - len(heard.split())
+    left = 3 * WORDS_PER_MINUTE - len(heard.split())
     assert sum(targets(llm)) == pytest.approx(left, abs=3)
     assert targets(llm)[1] == pytest.approx(2 * targets(llm)[0], abs=1)
 
@@ -217,7 +242,7 @@ def test_only_the_outline_and_detail_think(episode_run):
     """Thinking is on for the outline and the check and off for everything else, each with Qwen3's sampling for its mode."""
     llm = episode_run.llm
     thinks = {p: s["extra_body"]["chat_template_kwargs"]["enable_thinking"] for p, s in llm.settings.items()}  # fmt: skip
-    assert thinks == {"abstract": False, "contributions": False, "notes": False, "outline": True, "detail": True, "method": False}  # fmt: skip
+    assert thinks == {"introduction": False, "credits": False, "contributions": False, "notes": False, "outline": True, "detail": True, "method": False}  # fmt: skip
 
 
 def test_run_with_a_claude_model_chunks_with_the_local_tokenizer(

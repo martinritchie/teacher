@@ -1,8 +1,12 @@
-"""The script of a `teacher run` episode, in three parts, each told everything the listener has already heard:
-1. the abstract, transcribed for the ear;
-2. the contributions, for a listener who knows ML but not this subfield;
-3. how it works: notes on every section, one planner call that outlines the method as components, then for
-   each component a detail pass over the full text of its sections and a checked part (see part.py).
+"""The script of a `teacher run` episode, in chapters, each told everything the listener has already heard:
+1. an introduction: what the work is about, in the episode's own words (the abstract is the authors' text, so it
+   is paraphrased, never read out);
+2. the authors, grouped by institution, and anyone the front page thanks;
+3. the contributions, for a listener who knows ML but not this subfield;
+4. how it works: notes on every section, one planner call that outlines the method as components, then for
+   each component a detail pass over the full text of its sections and a checked part (see part.py), one
+   chapter each.
+The script is Markdown: a `## ` heading starts each chapter, and every other block is a spoken paragraph.
 """
 
 import re
@@ -25,13 +29,32 @@ from teacher.settings import SCRIPT_MODEL, WORDS_PER_MINUTE
 from teacher.speech import unspoken
 
 MAX_SECTION_CHARS = 12000  # about 3k tokens of abstract, introduction or conclusion
-MIN_OVERLAP = 0.8  # share of the abstract's words the transcription must keep
+COPIED_WORDS = 8  # a run of this many words taken from the abstract is a quotation, not a paraphrase
+MAX_NAMED = 6  # authors named per institution; the rest are counted
 SPOKEN = "Plain spoken English: no symbols, LaTeX or markup; numbers and acronyms as they are said."
 
 
-class Abstract(BaseModel):
+class Introduction(BaseModel):
     text: str = Field(
-        description=f"The abstract, sentence for sentence. Change only what cannot be spoken. {SPOKEN}"
+        description=f"What the work is about and why it matters, in your own words, about as long as the abstract. {SPOKEN}"
+    )
+
+
+class Affiliation(BaseModel):
+    institution: str = Field(
+        description=f"The institution as it would be said aloud, e.g. 'WeChat AI, at Tencent'. {SPOKEN}"
+    )
+    authors: list[str] = Field(
+        description="Full names exactly as printed, in the paper's order."
+    )
+
+
+class Credits(BaseModel):
+    affiliations: list[Affiliation] = Field(
+        description="Every institution on the front page, in the order of its first author. An author with several appears under each."
+    )
+    thanks: str = Field(
+        description=f"If the front page explicitly thanks people or organisations, one or two sentences saying whom and for what. Empty if it thanks no one. {SPOKEN}"
     )
 
 
@@ -72,7 +95,8 @@ class Method(BaseModel):
     )
 
 
-_abstract_reader = agent("episode/abstract", Abstract)
+_introducer = agent("episode/introduction", Introduction)
+_credits_reader = agent("episode/credits", Credits)
 _contributions_writer = agent("episode/contributions", Contributions)
 _section_notes = agent("plan/section_notes")
 _planner = agent("plan/planner", Method, thinks=True)
@@ -93,46 +117,92 @@ def split_into_chunks(markdown: str, model: str, max_tokens: int) -> list[str]:
     return [c for s in sections if s.strip() for c in split(s.strip())]
 
 
-def write_episode(markdown: str, chunks: list[str], llm: Model, minutes: int) -> str:
-    """The script; every call goes to the trace, if one is open (llm.start_trace). The section notes are written
-    while the abstract and contributions are, since they do not depend on what was heard."""
+def write_episode(
+    markdown: str, front: str, chunks: list[str], llm: Model, minutes: int
+) -> str:
+    """The script, as Markdown chapters; every call goes to the trace, if one is open (llm.start_trace). The
+    section notes are written while the opening is, since they do not depend on what was heard."""
 
-    def opening() -> str:
-        abstract = _read_abstract(_section(markdown, "abstract"), llm)
+    def opening() -> list[tuple[str, str]]:
+        abstract = _section(markdown, "abstract") or chunks[0][:MAX_SECTION_CHARS]
+        introduction = _introduce(abstract, llm)
         contributions = ask_until(
             _contributions_writer,
             llm,
             lambda c: unspoken(" ".join(c.spoken())),
-            heard=abstract,
+            heard=introduction,
             introduction=_section(markdown, "introduction") or chunks[0],
             conclusion=_section(markdown, "conclusions?"),
         )
-        return "\n\n".join(filter(None, [abstract, *contributions.spoken()]))
+        return [("Introduction", introduction), ("Authors", _credits(front, llm)),
+                ("Contributions", "\n\n".join(contributions.spoken()))]  # fmt: skip
 
     def all_notes() -> list[str]:
         return parallel(lambda c: ask(_section_notes, llm, chunk=c), chunks)
 
-    heard, notes = parallel(lambda job: job(), [opening, all_notes])
+    chapters, notes = parallel(lambda job: job(), [opening, all_notes])
+    heard = "\n\n".join(text for _, text in chapters)
     headings = [_headings(c) for c in chunks]
     method = ask(_planner, llm, notes=notes, headings=headings, heard=heard)
     budget = minutes * WORDS_PER_MINUTE - len(heard.split())
     parts = _how_it_works(method, chunks, heard, budget, llm)
-    return "\n\n".join([heard, _overview(method), *parts])
+    parts[0] = f"{_overview(method)}\n\n{parts[0]}"
+    chapters += [(c.name[:1].upper() + c.name[1:], p) for c, p in zip(method.components, parts)]  # fmt: skip
+    return "\n\n".join(f"## {title}\n\n{text}" for title, text in chapters if text)
 
 
-def _read_abstract(abstract: str, llm: Model) -> str:
-    """The abstract for the ear, read again once if the transcription strays from the original words or
-    keeps symbols."""
-    if not abstract:
+def _introduce(abstract: str, llm: Model) -> str:
+    """What the work is about, from its abstract but in other words: written again once if it copies a run of
+    the abstract's words or keeps symbols."""
+
+    def check(i: Introduction) -> list[str]:
+        copied, announced = (
+            _copied(abstract, i.text),
+            re.match(r"[^.\n]*:\s*\n", i.text),
+        )
+        return (
+            unspoken(i.text)
+            + bool(announced)
+            * [
+                f'Start with the content itself: "{announced and announced.group().strip()}" would be read aloud.'
+            ]
+            + bool(copied)
+            * [
+                f'These words are copied from the abstract: "{copied}". Say it in your own words.'
+            ]
+        )
+
+    return ask_until(_introducer, llm, check, abstract=abstract).text
+
+
+def _credits(front: str, llm: Model) -> str:
+    """The authors, grouped by institution, then whom the front page thanks. Asked again once if it names
+    someone not on the page."""
+    if not front.strip():
         return ""
+    page = re.sub(r"\W+", " ", front.lower())
 
-    def check(a: Abstract) -> list[str]:
-        strays = _overlap(abstract, a.text) < MIN_OVERLAP
-        return unspoken(a.text) + strays * [
-            "Keep every sentence, in the authors' words."
+    def check(c: Credits) -> list[str]:
+        names = [n for a in c.affiliations for n in a.authors]
+        absent = [
+            n for n in names if re.sub(r"\W+", " ", n.lower()).strip() not in page
         ]
+        return absent and [f"Not on the front page: {', '.join(absent)}. Copy names exactly as printed."]  # fmt: skip
 
-    return ask_until(_abstract_reader, llm, check, abstract=abstract).text
+    credits = ask_until(_credits_reader, llm, check, front=front)
+    named: set[str] = set()
+    lines = []
+    for a in (a for a in credits.affiliations if a.authors):
+        names = a.authors[:MAX_NAMED] + [f"{_number(len(a.authors) - MAX_NAMED)} others"] * (len(a.authors) > MAX_NAMED)  # fmt: skip
+        also = " also" if set(a.authors) <= named else ""
+        lines.append(
+            f"{_listed(names)} {'are' if len(names) > 1 else 'is'}{also} at {a.institution}."
+        )
+        named |= set(a.authors)
+    thanks = (
+        credits.thanks if re.search(r"thank|grateful|acknowledg", front, re.I) else ""
+    )
+    return "\n\n".join(filter(None, [" ".join(lines), thanks]))
 
 
 def _how_it_works(
@@ -183,10 +253,11 @@ def _headings(chunk: str) -> str:
 
 def _overview(method: Method) -> str:
     names = [c.name for c in method.components]
-    listed = f"{', '.join(names[:-1])} and {names[-1]}" if len(names) > 1 else names[0]
-    return (
-        f"Here is how it works. The method has {_number(len(names))} pieces: {listed}."
-    )
+    return f"Here is how it works. The method has {_number(len(names))} piece{'s' * (len(names) > 1)}: {_listed(names)}."
+
+
+def _listed(items: list[str]) -> str:
+    return f"{', '.join(items[:-1])} and {items[-1]}" if len(items) > 1 else items[0]
 
 
 def _section(markdown: str, name: str) -> str:
@@ -195,9 +266,15 @@ def _section(markdown: str, name: str) -> str:
     return match.group(1).strip()[:MAX_SECTION_CHARS] if match else ""
 
 
-def _overlap(original: str, spoken: str) -> float:
-    words = lambda s: set(re.findall(r"[a-z]{3,}", s.lower()))  # noqa: E731
-    return len(words(original) & words(spoken)) / max(len(words(original)), 1)
+def _copied(original: str, spoken: str) -> str:
+    """The first run of COPIED_WORDS words of `spoken` that is also in `original`, or ""."""
+    words = lambda s: re.findall(r"[a-z0-9]+", s.lower())  # noqa: E731
+    source, said = " " + " ".join(words(original)) + " ", words(spoken)
+    runs = (
+        " ".join(said[i : i + COPIED_WORDS])
+        for i in range(len(said) - COPIED_WORDS + 1)
+    )
+    return next((r for r in runs if f" {r} " in source), "")
 
 
 def _number(n: int) -> str:

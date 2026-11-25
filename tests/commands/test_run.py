@@ -3,6 +3,7 @@
 from pydantic_ai.exceptions import ModelHTTPError
 
 import teacher.commands.run as run_mod
+from teacher.speech import chapters, make_speakable
 from teacher.testing import (
     PDF,
     SMALL_MODEL,
@@ -14,15 +15,26 @@ from teacher.testing import (
 def test_no_audio_writes_the_script_only(llm, tts, tmp_path):
     """--no-audio stops after the script: <name>.md is written, and no TTS is started."""
     run(PDF, "--out", tmp_path, "--no-audio")
-    assert (tmp_path / f"{PDF.stem}.md").read_text().startswith("The efficiency")
+    assert (
+        (tmp_path / f"{PDF.stem}.md")
+        .read_text()
+        .startswith("## Introduction\n\nAn introduction")
+    )
     assert not tts and not (tmp_path / f"{PDF.stem}.mp3").exists()
 
 
 def test_pdf_in_script_and_audio_out(episode_run):
-    """One command turns a local PDF into <name>.md and <name>.mp3."""
+    """One command turns a local PDF into <name>.md, the script in chapters, and <name>.mp3, which marks them."""
     tts, out = episode_run.tts, episode_run.out
-    assert (out / f"{PDF.stem}.mp3").exists()
-    assert (out / f"{PDF.stem}.md").read_text() == tts[0].script
+    script = (out / f"{PDF.stem}.md").read_text()
+    assert make_speakable(script) == tts[0].script.split("\n\n")
+    assert [t for t, _ in chapters(script)] == [
+        "Introduction",
+        "Authors",
+        "Contributions",
+        "Piece 1",
+    ]
+    assert (out / f"{PDF.stem}.mp3").read_bytes()[:3] == b"ID3"
 
 
 def test_rejected_call_is_an_error(llm, tts, tmp_path):
