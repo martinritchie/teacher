@@ -2,6 +2,7 @@
 
 import re
 import struct
+from collections.abc import Sequence, Set
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -89,8 +90,8 @@ def save(
     out: Path,
     name: str,
     paragraphs: list[str],
-    clips: list[np.ndarray] = (),
-    marks: list[tuple[str, int]] = (),
+    clips: Sequence[np.ndarray] = (),
+    marks: Sequence[tuple[str, int]] = (),
 ) -> None:
     """<out>/<name>.md (the spoken script, with a heading at each of `marks`, from `chapters`) and, with clips,
     <out>/<name>.mp3, with chapter marks podcast apps can skip between, and one WAV per paragraph in
@@ -113,7 +114,7 @@ def save(
 
 
 def _join(
-    clips: list[np.ndarray], new_chapters: set[int] = frozenset()
+    clips: Sequence[np.ndarray], new_chapters: Set[int] = frozenset()
 ) -> tuple[np.ndarray, list[int]]:
     """The clips with a pause between paragraphs, a longer one before a new chapter; and where each clip starts."""
     parts, starts, at = [], [], 0

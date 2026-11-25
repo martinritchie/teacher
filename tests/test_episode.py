@@ -57,6 +57,7 @@ def test_chunks_fit_the_real_tokenizer():
     from teacher.episode import split_into_chunks
 
     tokens = AutoTokenizer.from_pretrained(SMALL_MODEL)
+    assert tokens is not None
     chunks = split_into_chunks(PDF_MARKDOWN.read_text(), SMALL_MODEL, 500)
     assert len(chunks) > 30 and all(len(tokens.encode(c)) <= 500 for c in chunks)
 

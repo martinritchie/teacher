@@ -8,7 +8,7 @@ import subprocess
 import sys
 import threading
 import time
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager, nullcontext
 from pathlib import Path
 
@@ -24,7 +24,7 @@ from teacher.settings import CLAUDE_KEY, profile
 @contextmanager
 def serve_script_model(
     model: str, log: Path, server: str | None = None
-) -> Iterator[Model]:
+) -> Generator[Model]:
     """The script model for this block: Claude on the Anthropic API for claude-*, otherwise vLLM's
     OpenAI-compatible server, started here unless `server` (a URL from `teacher serve`) is given. A call the
     model's server rejects ends the run."""
@@ -81,7 +81,7 @@ def claude(model: str) -> Model:
 
 
 @contextmanager
-def vllm_server(cmd: list[str], log: Path, port: int | None = None) -> Iterator[str]:
+def vllm_server(cmd: list[str], log: Path, port: int | None = None) -> Generator[str]:
     """Run `cmd` (a vLLM server) on `port`, or a free one, for the length of
     the block; yields its URL. The server is stopped however the block ends, including on SIGTERM or SIGHUP (a
     `pkill`, a closed terminal). Its command and startup time go in the trace."""

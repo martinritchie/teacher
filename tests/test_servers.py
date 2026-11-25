@@ -72,6 +72,7 @@ def test_stopping_reaches_an_engine_whose_server_already_exited(tmp_path):
     """If the server process has died but left its engine running, stopping still signals the whole group."""
     script = "import subprocess, sys; e = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(600)']); print(e.pid, flush=True)"  # fmt: skip
     proc = subprocess.Popen([sys.executable, "-c", script], stdout=subprocess.PIPE, text=True, start_new_session=True)  # fmt: skip
+    assert proc.stdout is not None
     engine = int(proc.stdout.readline())
     proc.wait()
     assert alive(engine)

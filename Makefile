@@ -9,7 +9,7 @@ help:
 	@echo "  make clean       Remove build artifacts and cache files"
 	@echo "  make format      Format code with ruff"
 	@echo "  make lint        Check code quality"
-	@echo "  make check       Format and lint"
+	@echo "  make check       Format, lint and typecheck"
 	@echo "  make test             Unit tests: under 2 seconds, offline, no GPU"
 	@echo "  make test-functional  Functional tests: real MinerU, Qwen3-TTS, tokenizer and processes (minutes, GPU)"
 	@echo "  make test-all         Both"
@@ -33,6 +33,7 @@ format:
 
 lint:
 	uv run ruff check --fix .
+	uv run ty check
 
 check: format lint
 	@echo "✓ Code formatting and linting complete"

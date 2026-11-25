@@ -99,7 +99,7 @@ def serve(monkeypatch, body: bytes):
 
 
 def block(prompt, tag):
-    return re.search(rf"<{tag}>\n(.*?)\n</{tag}>", prompt, re.S).group(1)
+    return re.findall(rf"<{tag}>\n(.*?)\n</{tag}>", prompt, re.S)[0]
 
 
 def chunk(call):
@@ -120,7 +120,7 @@ def method(components):
 
 
 def targets(llm):
-    return [int(re.search(r"about (\d+) words", c.prompt).group(1)) for c in llm.of("method")]  # fmt: skip
+    return [int(re.findall(r"about (\d+) words", c.prompt)[0]) for c in llm.of("method")]  # fmt: skip
 
 
 def paragraphs(tts):

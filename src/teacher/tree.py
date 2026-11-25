@@ -184,7 +184,7 @@ def _find(text: str, words: str, after: int = 0) -> int | None:
     heading line."""
     for n in (8, 4):
         pattern = r"\s+".join(map(re.escape, words.lstrip("# ").split()[:n]))
-        match = pattern and re.compile(pattern).search(text, after)
+        match = re.compile(pattern).search(text, after) if pattern else None
         if match:
             line = text.rfind("\n", 0, match.start()) + 1
             heading = line >= after and not text[line : match.start()].strip("# ")

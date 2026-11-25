@@ -132,7 +132,7 @@ def _llm(monkeypatch):
     def reply(messages, info: AgentInfo, model: str):
         if calls.error:
             raise calls.error
-        phase = PHASES[info.instructions.splitlines()[0]]
+        phase = PHASES[(info.instructions or "").splitlines()[0]]
         prompt = str(messages[-1].parts[-1].content)  # a retry's content is a list
         calls.settings[phase] = info.model_settings
         calls.append(SimpleNamespace(phase=phase, prompt=prompt, model=model))

@@ -5,6 +5,7 @@ the episode's speaker, and how its delivery (pitch, pitch range, pace) compares 
 import re
 from collections import Counter
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import soundfile
@@ -31,7 +32,7 @@ def check_clips(
 
     device = 0 if torch.cuda.is_available() else -1
     audio = [_load(c) for c in clips]
-    asr = pipeline("automatic-speech-recognition", model=ASR_MODEL, device=device)
+    asr: Any = pipeline("automatic-speech-recognition", model=ASR_MODEL, device=device)
 
     # Whisper's long-form transcription, and its timestamp mode, can loop on a clip, repeating text until the WER is
     # meaningless. Each clip is heard as independent 15-second windows without timestamps; the language is read

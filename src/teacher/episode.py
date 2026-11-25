@@ -10,6 +10,7 @@ The script is Markdown: a `## ` heading starts each chapter, and every other blo
 """
 
 import re
+from typing import Any
 
 import semchunk
 from pydantic import BaseModel, Field
@@ -113,7 +114,7 @@ def split_into_chunks(markdown: str, model: str, max_tokens: int) -> list[str]:
     tokenizer = (
         SCRIPT_MODEL if model.startswith("claude-") else model
     )  # an API model has no local tokenizer
-    split = semchunk.chunkerify(tokenizer, max_tokens)
+    split: Any = semchunk.chunkerify(tokenizer, max_tokens)
     return [c for s in sections if s.strip() for c in split(s.strip())]
 
 

@@ -6,6 +6,7 @@ badly, go back to the writer once.
 """
 
 import re
+from typing import Any
 
 from pydantic import BaseModel, Field
 from pydantic_ai.models import Model
@@ -98,7 +99,7 @@ def write_part(
 ) -> str:
     """The part for `brief`, continuing from `parts`, the parts the listener has heard so far. With `log`, each
     checked draft is added to it with its problems, split into the checker's and the symbol check's."""
-    values = dict(brief) | {"previous": _previous(parts)}
+    values: dict[str, Any] = dict(brief) | {"previous": _previous(parts)}
 
     def check(part: str) -> list[str]:
         if not CHECK_PARTS:
