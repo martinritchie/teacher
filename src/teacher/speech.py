@@ -83,6 +83,7 @@ class Voice:
     clone: Path | None = None
     even_pace: bool = False  # stretch every clip to WORDS_PER_MINUTE
     sentences: bool = True  # one request per sentence, joined with short pauses, not one per paragraph
+    group_chars: int = 0  # with sentences: pack neighbouring sentences into requests of up to this many characters
 
 
 def speak(paragraphs: list[str], voice: Voice, server: str) -> list[np.ndarray]:
@@ -94,7 +95,10 @@ def speak(paragraphs: list[str], voice: Voice, server: str) -> list[np.ndarray]:
         audio = base64.b64encode(voice.clone.read_bytes()).decode()
         request |= {"task_type": "Base", "ref_audio": f"data:audio/wav;base64,{audio}",
                     "ref_text": voice.clone.with_suffix(".txt").read_text().strip()}  # fmt: skip
-    pieces = [split_sentences(p) if voice.sentences else [p] for p in paragraphs]
+    pieces = [
+        _grouped(split_sentences(p), voice.group_chars) if voice.sentences else [p]
+        for p in paragraphs
+    ]
     spoken = iter(
         clip
         for batch in _batches([s for p in pieces for s in p])
@@ -106,6 +110,17 @@ def speak(paragraphs: list[str], voice: Voice, server: str) -> list[np.ndarray]:
         for p in pieces
     ]
     return even_out(clips, paragraphs, pace=voice.even_pace)
+
+
+def _grouped(sentences: list[str], chars: int) -> list[str]:
+    """Neighbouring sentences joined while they fit in `chars`; a longer sentence stays alone."""
+    groups: list[str] = []
+    for s in sentences:
+        if groups and len(groups[-1]) + 1 + len(s) <= chars:
+            groups[-1] += " " + s
+        else:
+            groups.append(s)
+    return groups
 
 
 def split_sentences(paragraph: str) -> list[str]:

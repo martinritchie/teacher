@@ -38,6 +38,13 @@ def speak_script(
         True,
         help="One TTS request per sentence, joined with short pauses (off: one per paragraph)",
     ),
+    group_chars: int = typer.Option(
+        0,
+        help="With --sentences, pack neighbouring sentences into requests of up to this many characters",
+    ),
+    seed: int = typer.Option(
+        None, help="Sampling seed for every TTS request (default: random)"
+    ),
     clone: Path = typer.Option(
         None,
         help="A reference WAV, with its transcript in a .txt beside it, for every paragraph to imitate; uses the Base (voice clone) model",
@@ -55,7 +62,9 @@ def speak_script(
     name = name or script.stem
     out.mkdir(parents=True, exist_ok=True)
     model = VOICE_CLONE_MODEL if clone else VOICE_MODEL
-    sampling = dict(temperature=temperature, top_p=top_p, top_k=top_k)
+    sampling = dict(temperature=temperature, top_p=top_p, top_k=top_k) | (
+        {"seed": seed} if seed is not None else {}
+    )
     with serve_voice_model(model, out / f"{name}.voice-model.log", sampling) as tts:
         clips = speak(
             paragraphs,
@@ -65,6 +74,7 @@ def speak_script(
                 clone=clone,
                 even_pace=even_pace,
                 sentences=sentences,
+                group_chars=group_chars,
             ),
             tts,
         )
