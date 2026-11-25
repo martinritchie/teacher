@@ -1,7 +1,7 @@
 """`teacher run`: a paper or blog post in, a narrated MP3 out.
 
 Start here. Each line is one stage of the data flow, and each stage lives in its own module:
-source (read and convert), episode (introduction, authors, contributions, method), speech (Kokoro TTS), servers (local vLLM).
+source (read and convert), episode (introduction, authors, contributions, method), tts (Kokoro), servers (local vLLM).
 Only one model holds the GPU at a time.
 """
 
@@ -16,7 +16,7 @@ from teacher.llm import record, stage, start_trace
 from teacher.servers import serve_script_model
 from teacher.settings import SCRIPT_MODEL, VOICE, VOICE_MODEL
 from teacher.source import read_source
-from teacher.speech import Voice, chapters, make_speakable, save, speak
+from teacher.tts import Voice, chapters, make_speakable, save, synthesize
 
 
 def run(
@@ -51,7 +51,7 @@ def run(
     record(stage="read", seconds=round(time.monotonic() - start, 1))
 
     with (
-        stage("write"),
+        stage("narrate"),
         serve_script_model(model, out / "script-model.log", server) as llm,
     ):
         script = write_episode(paper.markdown, paper.front, chunks, llm, minutes)
@@ -63,7 +63,7 @@ def run(
     typer.echo(f"Wrote {out / paper.name}.md")
 
     if audio:
-        with stage("speak"):
-            clips = speak(paragraphs, Voice(voice))
+        with stage("tts"):
+            clips = synthesize(paragraphs, Voice(voice))
         save(out, paper.name, paragraphs, clips, marks)
         typer.echo(f"Wrote {out / paper.name}.mp3")

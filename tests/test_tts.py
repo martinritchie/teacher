@@ -1,4 +1,4 @@
-"""Speech (speech.py): markup removed, one clip per paragraph, and real Kokoro in a functional test."""
+"""Speech (tts.py): markup removed, one clip per paragraph, and real Kokoro in a functional test."""
 
 import re
 
@@ -38,16 +38,18 @@ def test_run_saves_one_clip_per_paragraph(episode_run):
 def test_voice_model_writes_playable_audio():
     """Real Kokoro, no stub: two paragraphs become two clips of audio, over two seconds in all, and the same text
     takes the same time again (Kokoro has no sampled voice to drift; only its decoder adds a little noise)."""
-    from teacher.speech import Voice, speak
+    from teacher.tts import Voice, synthesize
 
-    clips = speak(["The authors train an autoencoder.", "Then they predict."], Voice())
+    clips = synthesize(
+        ["The authors train an autoencoder.", "Then they predict."], Voice()
+    )
     assert len(clips) == 2 and sum(len(c) for c in clips) / SAMPLE_RATE > 2
-    assert len(speak(["Then they predict."], Voice())[0]) == len(clips[1])
+    assert len(synthesize(["Then they predict."], Voice())[0]) == len(clips[1])
 
 
 def test_numbers_are_spelled_as_spoken():
     """Digits become words; digits inside words and symbols are left for the writer to rephrase."""
-    from teacher.speech import spell_numbers
+    from teacher.tts import spell_numbers
 
     text = "Use 128 dimensions, a floor of 0.5, and 15% masking, as in A.1 with x2 and 1/n."
     assert spell_numbers(text) == (

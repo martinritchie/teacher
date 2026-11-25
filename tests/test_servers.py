@@ -27,7 +27,7 @@ def test_server_option_uses_a_running_server(llm, tmp_path):
     """With --server, commands use that server instead of starting vLLM."""
     (tmp_path / "x.outline.json").write_text(json.dumps(TREE))
     cli(
-        "write",
+        "narrate",
         tmp_path / "x.outline.json",
         "--node",
         "Encoder",
@@ -37,14 +37,14 @@ def test_server_option_uses_a_running_server(llm, tmp_path):
         "http://127.0.0.1:8000",
     )
     assert llm.started == 0
-    cli("write", tmp_path / "x.outline.json", "--node", "Encoder", "--out", tmp_path)
+    cli("narrate", tmp_path / "x.outline.json", "--node", "Encoder", "--out", tmp_path)
     assert llm.started == 1
 
 
 def test_a_claude_model_runs_on_the_api_with_its_own_settings(llm, tmp_path, checked):
     """--model claude-* starts no vLLM server. Its calls get Claude's settings: effort by role, no sampling settings."""
     (tmp_path / "x.outline.json").write_text(json.dumps(TREE))
-    args = ["write", tmp_path / "x.outline.json", "--node", "Encoder", "--out", tmp_path, "--model", "claude-sonnet-5-5"]  # fmt: skip
+    args = ["narrate", tmp_path / "x.outline.json", "--node", "Encoder", "--out", tmp_path, "--model", "claude-sonnet-5-5"]  # fmt: skip
     result = CliRunner().invoke(app, list(map(str, args)))
     assert result.exit_code == 0, result.output
     assert llm.started == 0 and {c.model for c in llm} == {"claude-sonnet-5-5"}

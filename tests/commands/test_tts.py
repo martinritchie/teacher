@@ -1,4 +1,4 @@
-"""`teacher speak` (commands/speak.py): an existing script voiced again, chapters kept."""
+"""`teacher tts` (commands/tts.py): an existing script voiced again, chapters kept."""
 
 import sys
 from types import SimpleNamespace
@@ -7,7 +7,7 @@ import numpy as np
 
 from typer.testing import CliRunner
 
-import teacher.speech as speech_mod
+import teacher.tts as tts_mod
 from teacher.cli import app
 
 
@@ -31,12 +31,12 @@ def test_speak_voices_each_paragraph_with_the_chosen_voice(tmp_path, monkeypatch
     monkeypatch.setitem(
         sys.modules, "kokoro", SimpleNamespace(KPipeline=Reader)
     )  # not the real one: it loads torch
-    monkeypatch.setattr(speech_mod, "PAUSE_SECONDS", 0.01)
+    monkeypatch.setattr(tts_mod, "PAUSE_SECONDS", 0.01)
     (tmp_path / "ep.md").write_text(
         "## One\n\nFirst paragraph.\n\n## Two\n\nSecond paragraph."
     )
     args = [
-        "speak",
+        "tts",
         str(tmp_path / "ep.md"),
         "--out",
         str(tmp_path),

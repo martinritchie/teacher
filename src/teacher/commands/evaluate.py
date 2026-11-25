@@ -13,7 +13,7 @@ from teacher.judge import judge, unsupported
 from teacher.llm import parallel, start_trace
 from teacher.servers import claude, serve_script_model
 from teacher.settings import JUDGE_MODEL, SCRIPT_MODEL
-from teacher.speech import UNSPOKEN
+from teacher.tts import UNSPOKEN
 from teacher.tree import NOTE_ROUNDS, find_node, load_tree, narrate
 
 

@@ -35,7 +35,7 @@ jobs:
           export PATH="$HOME/.local/bin:$PATH"
           uv sync --frozen
           set +e
-          uv run teacher episodes
+          uv run teacher batch
           code=$?
           set -e
           echo "code=$code" >> "$GITHUB_OUTPUT"

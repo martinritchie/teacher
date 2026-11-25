@@ -27,7 +27,7 @@ def test_every_call_is_traced(episode_run):
 
 def test_the_trace_records_tokens_and_the_time_of_each_stage(episode_run):
     """For benchmarking: every call's input and output tokens and its model requests, and the seconds each stage
-    of `teacher run` took (read, write, speak), in order."""
+    of `teacher run` took (read, narrate, tts), in order."""
     lines = [
         json.loads(line)
         for line in (episode_run.out / f"{PDF.stem}.trace.jsonl")
@@ -43,7 +43,7 @@ def test_the_trace_records_tokens_and_the_time_of_each_stage(episode_run):
         len(c["finish_reasons"]) == 1 and "messages" not in c for c in calls
     )  # one request: no history kept
     stages = [line for line in lines if "stage" in line]
-    assert [s["stage"] for s in stages] == ["read", "write", "speak"]
+    assert [s["stage"] for s in stages] == ["read", "narrate", "tts"]
     assert all(isinstance(s["seconds"], float) for s in stages)
     assert lines.index(stages[0]) == 0 and lines[-1] == stages[-1]
 
@@ -51,7 +51,7 @@ def test_the_trace_records_tokens_and_the_time_of_each_stage(episode_run):
 def test_the_trace_records_each_calls_model_and_time(llm, tmp_path):
     """Each trace line names the model and how long the call took, to see where a run's time goes."""
     (tmp_path / "x.outline.json").write_text(json.dumps(TREE))
-    cli("write", tmp_path / "x.outline.json", "--node", "Encoder", "--out", tmp_path)
+    cli("narrate", tmp_path / "x.outline.json", "--node", "Encoder", "--out", tmp_path)
     line = json.loads((tmp_path / "x.encoder.trace.jsonl").read_text().splitlines()[0])
     assert line["model"] == SMALL_MODEL and isinstance(line["seconds"], float)
 

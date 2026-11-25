@@ -21,7 +21,7 @@ OUTLIER = (
 )
 
 
-def hear(
+def check_clips(
     clips: list[Path], texts: list[str], reference: Path | None = None
 ) -> list[dict]:
     """One row per clip: seconds, Whisper's transcript, its language, word error rate against the script, and

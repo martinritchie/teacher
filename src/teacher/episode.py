@@ -26,7 +26,7 @@ from teacher.part import (
     write_part,
 )
 from teacher.settings import SCRIPT_MODEL, WORDS_PER_MINUTE
-from teacher.speech import unspoken
+from teacher.tts import unspoken
 
 MAX_SECTION_CHARS = 12000  # about 3k tokens of abstract, introduction or conclusion
 COPIED_WORDS = 8  # a run of this many words taken from the abstract is a quotation, not a paraphrase

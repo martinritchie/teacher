@@ -27,7 +27,7 @@ import teacher.llm as llm_mod
 import teacher.part as part
 import teacher.servers as servers
 import teacher.source as source
-import teacher.speech as speech
+import teacher.tts as tts_mod
 from teacher.settings import (
     SAMPLE_RATE,
 )
@@ -190,12 +190,12 @@ def _llm(monkeypatch):
 def _tts(monkeypatch):
     calls = []
 
-    def speak(paragraphs, voice):
+    def synthesize(paragraphs, voice):
         calls.append(SimpleNamespace(script="\n\n".join(paragraphs), voice=voice.name))
         return [
             np.zeros(SAMPLE_RATE // 100) for _ in paragraphs
         ]  # a short MP3 encodes quickly
 
-    monkeypatch.setattr(run_mod, "speak", speak)
-    monkeypatch.setattr(speech, "PAUSE_SECONDS", 0.01)
+    monkeypatch.setattr(run_mod, "synthesize", synthesize)
+    monkeypatch.setattr(tts_mod, "PAUSE_SECONDS", 0.01)
     return calls

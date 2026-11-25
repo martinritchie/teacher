@@ -1,4 +1,4 @@
-"""`teacher write` (commands/write.py): narrate one node of an outline tree."""
+"""`teacher narrate` (commands/narrate.py): narrate one node of an outline tree."""
 
 import json
 
@@ -10,9 +10,9 @@ from teacher.testing import (
 
 
 def test_write_narrates_every_leaf_under_a_node(llm, tmp_path, checked):
-    """`teacher write` narrates the leaves under the named node, in order: notes on each leaf's own text, then a part written from them with its siblings as the outline, listened to and checked."""
+    """`teacher narrate` narrates the leaves under the named node, in order: notes on each leaf's own text, then a part written from them with its siblings as the outline, listened to and checked."""
     (tmp_path / "x.outline.json").write_text(json.dumps(TREE))
-    cli("write", tmp_path / "x.outline.json", "--node", "method", "--out", tmp_path)
+    cli("narrate", tmp_path / "x.outline.json", "--node", "method", "--out", tmp_path)
     notes, parts = llm.of("leaf notes"), llm.of("method")
     assert [source_of(c) for c in notes] == ["The encoder maps tokens to vectors.", "The distance term compares samples.", "The diversity term spreads samples."]  # fmt: skip
     assert not llm.of("detail")

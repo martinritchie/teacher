@@ -68,7 +68,7 @@ Both diagrams are drawn in [Excalidraw](https://excalidraw.com). Each SVG in `do
 2. **Recursion**: for each section, a splitter (thinking on) reads its text and lists its subsections, each as a title and the exact words it starts with, or none if it is one idea. It writes nothing else. Code cuts the text at those words, and each piece is broken down in turn, until it is one idea, under 1,500 characters, or four levels deep.
 3. **Narration** of a node, leaf by leaf: a note-taker writes one fact per item from the leaf's text, and a separate verifier (thinking on) lists what the notes miss or get wrong against the text; the note-taker revises until the verifier finds nothing, or for at most three rounds. A part is then written from the notes, listened to and checked as above.
 
-`teacher outline` builds the tree, `teacher write` narrates one node of it, and `teacher eval` scores narrations against facts (see [Iterating on prompts](#iterating-on-prompts)).
+`teacher outline` builds the tree, `teacher narrate` narrates one node of it, and `teacher eval` scores narrations against facts (see [Iterating on prompts](#iterating-on-prompts)).
 
 ## Code
 
@@ -76,14 +76,14 @@ Both diagrams are drawn in [Excalidraw](https://excalidraw.com). Each SVG in `do
 
 | Module | Does |
 |---|---|
-| `commands/` | `run`, `episodes`, `outline`, `write`, `eval` (`evaluate.py`) and `serve`: options, files in and out, nothing else |
+| `commands/` | `run`, `batch`, `outline`, `narrate`, `eval` (`evaluate.py`), `judge-bench`, `tts`, `audio-check` and `serve`: options, files in and out, nothing else |
 | `source.py` | Fetch a path or URL, convert a PDF (MinerU), HTML (trafilatura) or Markdown file, cut the references; the first page's text, for the authors |
 | `episode.py` | The `run` script, in chapters: chunking, introduction, authors, contributions, then notes → planner → detailer → a checked part per component |
 | `tree.py` | The outline tree: top-level sections, recursive splitting, the notes loop, narrating a node |
 | `part.py` | One spoken part, shared by both: writer, numbers spelled in code, one rewrite if symbols remain (listener and checker behind `CHECK_PARTS`); the `Brief` it is written from |
 | `judge.py` | The fact judge for `eval`, and the check that its quote is in the narration |
 | `llm.py` | Talking to the model: `agent(name)`, `ask` (one traced call), `ask_until` (ask, check, ask again with the problems), `parallel` |
-| `speech.py` | Strip markup into paragraphs and chapters, synthesise them, write `.md` and `.mp3` with chapter marks; the check for words TTS reads badly |
+| `tts.py` | Strip markup into paragraphs and chapters, synthesise them, write `.md` and `.mp3` with chapter marks; the check for words TTS reads badly |
 | `servers.py` | Start a vLLM server for the length of a `with` block, or use a running one |
 | `settings.py` | Models, limits, server flags, sampling, parallelism, environment |
 
@@ -95,8 +95,8 @@ Everything the models see is in `src/teacher/prompts/`, as [Jinja2](https://jinj
 |---|---|---|
 | `episode/` | `introduction` writer, `credits` reader, `contributions` writer | `run` |
 | `plan/` | `section_notes`, `planner`, `detailer` | `run` |
-| `tree/` | `splitter`, `note_taker`, `notes_verifier` | `outline`, `write`, `eval` |
-| `part/` | `writer`, `listener`, `checker` | `run`, `write`, `eval` |
+| `tree/` | `splitter`, `note_taker`, `notes_verifier` | `outline`, `narrate`, `eval` |
+| `part/` | `writer`, `listener`, `checker` | `run`, `narrate`, `eval` |
 | `eval/` | `judge` | `eval` |
 
 ## Usage
@@ -110,9 +110,9 @@ uv run teacher run paper.pdf --no-audio                             # script onl
 
 ### Requesting an episode
 
-[`episodes/episodes.bib`](episodes/episodes.bib) is the show's list of papers. To request an episode, add its BibTeX citation there (the arXiv page's "Export BibTeX Citation" gives one) and merge it. `uv run teacher episodes` then makes an episode for every entry without `episodes/<key>.mp3`, read from its arXiv `eprint`, else its `url`, else its `doi`, and copies the script and MP3 in as `episodes/<key>.md` and `.mp3`. `--dry-run` lists what it would make.
+[`episodes/episodes.bib`](episodes/episodes.bib) is the show's list of papers. To request an episode, add its BibTeX citation there (the arXiv page's "Export BibTeX Citation" gives one) and merge it. `uv run teacher batch` then makes an episode for every entry without `episodes/<key>.mp3`, read from its arXiv `eprint`, else its `url`, else its `doi`, and copies the script and MP3 in as `episodes/<key>.md` and `.mp3`. `--dry-run` lists what it would make.
 
-On GitHub, [`.github/workflows/episodes.yml`](.github/workflows/episodes.yml) does this on a self-hosted runner, the PC with the GPU: on a push to `main` that changes `episodes.bib`, every three hours, or when started by hand. It commits the new episodes to `main`. The pipeline needs about 15 GiB of free GPU memory (`MIN_FREE_GPU_GIB`), so a desktop session or a game is often enough to stop it. Then `teacher episodes` makes nothing and exits with code 75, the workflow succeeds without a commit, and the next scheduled run tries again. Starting a game while an episode is being made can still run either out of memory.
+On GitHub, [`.github/workflows/episodes.yml`](.github/workflows/episodes.yml) does this on a self-hosted runner, the PC with the GPU: on a push to `main` that changes `episodes.bib`, every three hours, or when started by hand. It commits the new episodes to `main`. The pipeline needs about 15 GiB of free GPU memory (`MIN_FREE_GPU_GIB`), so a desktop session or a game is often enough to stop it. Then `teacher batch` makes nothing and exits with code 75, the workflow succeeds without a commit, and the next scheduled run tries again. Starting a game while an episode is being made can still run either out of memory.
 
 The workflow never runs for pull requests, since code from a fork must not run on a home PC. To set up the runner:
 
@@ -154,9 +154,9 @@ Everything a command writes goes under `out/`, which git ignores:
 | Path | Written by | Contents |
 |---|---|---|
 | `out/run/<name>.md`, `.mp3` | `run` | The script and the audio |
-| `out/<command>/<name>.trace.jsonl` | every command | Every model call, one JSON line each: the agent (such as `part/writer`), the model, the message, the reply, any error, its seconds, its input and output tokens, and why each model request ended (`finish_reasons`, such as `length` at the token cap). A call that needed more than one request also keeps every request and reply (`messages`), the failed attempts' reasoning included. Also each server's startup seconds and, for `run`, the seconds of each stage (read, write, speak), for benchmarking. The first place to look when a part comes out wrong |
+| `out/<command>/<name>.trace.jsonl` | every command | Every model call, one JSON line each: the agent (such as `part/writer`), the model, the message, the reply, any error, its seconds, its input and output tokens, and why each model request ended (`finish_reasons`, such as `length` at the token cap). A call that needed more than one request also keeps every request and reply (`messages`), the failed attempts' reasoning included. Also each server's startup seconds and, for `run`, the seconds of each stage (read, narrate, tts), for benchmarking. The first place to look when a part comes out wrong |
 | `out/outline/<name>.outline.md`, `.json` | `outline` | The nested headings; the tree with each node's text |
-| `out/write/<name>.<node>.md` | `write` | The narration of one node |
+| `out/narrate/<name>.<node>.md` | `narrate` | The narration of one node |
 | `out/eval/<time>.md` | `eval` | The score table, each narration, and each fact's verdict with the judge's quote |
 | `out/<command>/script-model.log`, `out/serve.log` | servers | vLLM logs |
 
@@ -178,7 +178,7 @@ A full `teacher run` takes a quarter of an hour or more. To change a prompt and 
 uv run teacher serve                     # once, in its own terminal: keeps the script model on the GPU
 uv run teacher eval --server http://127.0.0.1:8000                    # every case, about 3 minutes
 uv run teacher eval --server http://127.0.0.1:8000 --only "energy"    # one case, about a minute
-uv run teacher write evals/trees/2510.27688v1.outline.json --node "3.3.2" --server http://127.0.0.1:8000
+uv run teacher narrate evals/trees/2510.27688v1.outline.json --node "3.3.2" --server http://127.0.0.1:8000
 uv run teacher outline paper.pdf --server http://127.0.0.1:8000       # a new tree; also takes a .md file
 ```
 

@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 from pydantic_ai.models import Model
 
 from teacher.llm import Problems, agent, ask, ask_until
-from teacher.speech import spell_numbers, unspoken
+from teacher.tts import spell_numbers, unspoken
 
 MAX_PART_WORDS = 300  # a longer part pads; --minutes only ever shortens
 # About 4k tokens of source per part; keeps the checker inside its window.

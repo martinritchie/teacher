@@ -1,4 +1,4 @@
-"""`teacher episodes`: make an episode for every citation in a BibTeX file that has none yet.
+"""`teacher batch`: make an episode for every citation in a BibTeX file that has none yet.
 
 The file is the show's list: merging a citation into it requests an episode, named after its key.
 """
@@ -15,7 +15,7 @@ from teacher.source import _name_from
 GPU_BUSY = 75  # exit code: nothing wrong, try again later (EX_TEMPFAIL)
 
 
-def episodes(
+def batch(
     bib: Path = typer.Option(
         Path("episodes/episodes.bib"), help="BibTeX file of the show's papers"
     ),

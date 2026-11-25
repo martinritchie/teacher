@@ -73,7 +73,7 @@ class Voice:
     speed: float = 1.0
 
 
-def speak(paragraphs: list[str], voice: Voice = Voice()) -> list[np.ndarray]:
+def synthesize(paragraphs: list[str], voice: Voice = Voice()) -> list[np.ndarray]:
     """One clip per paragraph, from Kokoro on the GPU, or the CPU without one. Kokoro splits a long paragraph into
     pieces it can read itself. Nothing about the voice is sampled, so it cannot drift between paragraphs."""
     from kokoro import KPipeline

@@ -19,7 +19,7 @@ import pytest
 import teacher.episode as episode
 
 from teacher.settings import SCRIPT_MODEL, WORDS_PER_MINUTE
-from teacher.speech import chapters
+from teacher.tts import chapters
 from teacher.testing import (
     AUTHORS,
     CONTRIBUTIONS,

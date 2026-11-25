@@ -3,7 +3,7 @@
 from pydantic_ai.exceptions import ModelHTTPError
 
 import teacher.commands.run as run_mod
-from teacher.speech import chapters, make_speakable
+from teacher.tts import chapters, make_speakable
 from teacher.testing import (
     PDF,
     SMALL_MODEL,
@@ -73,10 +73,10 @@ def test_models_are_cli_arguments(llm, tts, tmp_path):
 def test_the_script_is_saved_even_if_speech_fails(llm, tmp_path, monkeypatch):
     """The script is written before the voice model starts, so a speech failure does not lose it."""
 
-    def broken_speak(paragraphs, voice, server):
+    def broken_synthesize(paragraphs, voice, server):
         raise RuntimeError("TTS failed")
 
-    monkeypatch.setattr(run_mod, "speak", broken_speak)
+    monkeypatch.setattr(run_mod, "synthesize", broken_synthesize)
     result = invoke(PDF, "--out", tmp_path, "--model", SMALL_MODEL)
     assert result.exit_code != 0
     assert (tmp_path / f"{PDF.stem}.md").read_text().strip()
