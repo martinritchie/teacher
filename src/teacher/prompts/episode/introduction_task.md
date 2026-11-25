@@ -6,4 +6,4 @@
 {{ draft.text }}
 </draft>
 {% endif %}{% include "_shared/problems.md" %}
-Transcribe this abstract for the ear.
+Write the introduction.

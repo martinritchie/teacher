@@ -12,7 +12,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 from pydantic_ai.models import Model
 
-from teacher.llm import agent, ask
+from teacher.llm import Problems, agent, ask
 
 
 class Verdict(BaseModel):
@@ -22,7 +22,8 @@ class Verdict(BaseModel):
     )
 
 
-_judge = agent("eval/judge", Verdict, thinks=True)
+_judge = agent("judge/judge", Verdict, thinks=True)
+_grounding = agent("judge/grounding", Problems, thinks=True)
 
 
 def judge(fact: str, narration: str, llm: Model) -> tuple[str, str, str]:
@@ -38,12 +39,22 @@ def judge(fact: str, narration: str, llm: Model) -> tuple[str, str, str]:
     return v.verdict, v.quote, ""
 
 
+def unsupported(narration: str, source: str, llm: Model) -> list[str]:
+    """Statements in the narration that the source does not support: errors no listed fact would catch."""
+    return ask(
+        _grounding, llm, Problems(problems=[]), source=source, narration=narration
+    ).problems
+
+
 def _quoted(quote: str, narration: str) -> bool:
-    """Every passage of the quote (split at '...') is in the narration: at least 90% of its words appear, in
-    order, in a window of the narration as long as the passage. Case and punctuation are ignored."""
+    """Every passage of the quote (split at '...' and between sentences, since judges join sentences from
+    different places) is in the narration: at least 90% of its words appear, in order, in a window of the
+    narration as long as the passage. Case and punctuation are ignored."""
     words = lambda s: re.findall(r"[a-z0-9]+", s.lower())  # noqa: E731
     text = words(narration)
-    passages = [w for p in re.split(r"\.\.\.|…", quote) if (w := words(p))]
+    passages = [
+        w for p in re.split(r"\.\.\.|…|(?<=[.!?])\s+", quote) if (w := words(p))
+    ]
     return bool(passages) and all(_in_order(p, text) for p in passages)
 
 

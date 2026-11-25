@@ -27,7 +27,7 @@ def test_server_option_uses_a_running_server(llm, tmp_path):
     """With --server, commands use that server instead of starting vLLM."""
     (tmp_path / "x.outline.json").write_text(json.dumps(TREE))
     cli(
-        "write",
+        "narrate",
         tmp_path / "x.outline.json",
         "--node",
         "Encoder",
@@ -37,14 +37,14 @@ def test_server_option_uses_a_running_server(llm, tmp_path):
         "http://127.0.0.1:8000",
     )
     assert llm.started == 0
-    cli("write", tmp_path / "x.outline.json", "--node", "Encoder", "--out", tmp_path)
+    cli("narrate", tmp_path / "x.outline.json", "--node", "Encoder", "--out", tmp_path)
     assert llm.started == 1
 
 
-def test_a_claude_model_runs_on_the_api_with_its_own_settings(llm, tmp_path):
+def test_a_claude_model_runs_on_the_api_with_its_own_settings(llm, tmp_path, checked):
     """--model claude-* starts no vLLM server. Its calls get Claude's settings: effort by role, no sampling settings."""
     (tmp_path / "x.outline.json").write_text(json.dumps(TREE))
-    args = ["write", tmp_path / "x.outline.json", "--node", "Encoder", "--out", tmp_path, "--model", "claude-sonnet-5-5"]  # fmt: skip
+    args = ["narrate", tmp_path / "x.outline.json", "--node", "Encoder", "--out", tmp_path, "--model", "claude-sonnet-5-5"]  # fmt: skip
     result = CliRunner().invoke(app, list(map(str, args)))
     assert result.exit_code == 0, result.output
     assert llm.started == 0 and {c.model for c in llm} == {"claude-sonnet-5-5"}
@@ -72,6 +72,7 @@ def test_stopping_reaches_an_engine_whose_server_already_exited(tmp_path):
     """If the server process has died but left its engine running, stopping still signals the whole group."""
     script = "import subprocess, sys; e = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(600)']); print(e.pid, flush=True)"  # fmt: skip
     proc = subprocess.Popen([sys.executable, "-c", script], stdout=subprocess.PIPE, text=True, start_new_session=True)  # fmt: skip
+    assert proc.stdout is not None
     engine = int(proc.stdout.readline())
     proc.wait()
     assert alive(engine)
@@ -100,3 +101,18 @@ def test_a_server_records_its_startup_time_in_the_trace(tmp_path, monkeypatch):
         pass
     line = json.loads((tmp_path / "t.trace.jsonl").read_text())
     assert isinstance(line["startup_seconds"], float) and "server" in line
+
+
+@pytest.mark.functional  # a real process
+def test_a_signal_exit_does_not_wait_for_worker_threads():
+    """After a SIGTERM the servers are stopped by the time `main` sees the exit; a worker thread still retrying a
+    call must not keep the process alive."""
+    import subprocess
+    import sys
+
+    stuck = "import concurrent.futures, signal, time, teacher.cli as c\n" \
+            "def app():\n    concurrent.futures.ThreadPoolExecutor(1).submit(time.sleep, 60)\n    raise SystemExit(128 + signal.SIGTERM)\n" \
+            "c.app = app\nc.main()"  # fmt: skip
+    start = time.monotonic()
+    done = subprocess.run([sys.executable, "-c", stuck], timeout=30)
+    assert done.returncode == 128 + signal.SIGTERM and time.monotonic() - start < 20

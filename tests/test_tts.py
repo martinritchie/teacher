@@ -1,13 +1,13 @@
-"""Speech (speech.py): markup removed, one clip per paragraph, and real Qwen3-TTS in a functional test."""
+"""Speech (tts.py): markup removed, one clip per paragraph, and real Kokoro in a functional test."""
 
 import re
+
 
 import pytest
 
 import teacher.commands.run as run_mod
 from teacher.settings import (
     SAMPLE_RATE,
-    VOICE_MODEL,
 )
 from teacher.testing import (
     PDF,
@@ -35,13 +35,24 @@ def test_run_saves_one_clip_per_paragraph(episode_run):
 
 
 @pytest.mark.functional
-def test_voice_model_writes_playable_audio(tmp_path):
-    """Real Qwen3-TTS on vLLM-Omni, no stub: two paragraphs become audio of more than two seconds."""
-    from teacher.servers import serve_voice_model
-    from teacher.speech import Voice, speak
+def test_voice_model_writes_playable_audio():
+    """Real Kokoro, no stub: two paragraphs become two clips of audio, over two seconds in all, and the same text
+    takes the same time again (Kokoro has no sampled voice to drift; only its decoder adds a little noise)."""
+    from teacher.tts import Voice, synthesize
 
-    with serve_voice_model(VOICE_MODEL, tmp_path / "voice.log") as server:
-        clips = speak(
-            ["The authors train an autoencoder.", "Then they predict."], Voice(), server
-        )
+    clips = synthesize(
+        ["The authors train an autoencoder.", "Then they predict."], Voice()
+    )
     assert len(clips) == 2 and sum(len(c) for c in clips) / SAMPLE_RATE > 2
+    assert len(synthesize(["Then they predict."], Voice())[0]) == len(clips[1])
+
+
+def test_numbers_are_spelled_as_spoken():
+    """Digits become words; digits inside words and symbols are left for the writer to rephrase."""
+    from teacher.tts import spell_numbers
+
+    text = "Use 128 dimensions, a floor of 0.5, and 15% masking, as in A.1 with x2 and 1/n."
+    assert spell_numbers(text) == (
+        "Use one hundred and twenty-eight dimensions, a floor of zero point five, and fifteen percent masking, "
+        "as in A.1 with x2 and 1/n."
+    )

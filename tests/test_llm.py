@@ -22,12 +22,12 @@ def test_every_call_is_traced(episode_run):
     trace = (out / f"{PDF.stem}.trace.jsonl").read_text().splitlines()
     lines = [json.loads(line) for line in trace if '"call"' in line]
     assert [line["prompt"] for line in lines] == [c.prompt for c in llm]
-    assert lines[0]["call"] == "episode/abstract" and "text" in lines[0]["output"]
+    assert lines[0]["call"] == "episode/introduction" and "text" in lines[0]["output"]
 
 
 def test_the_trace_records_tokens_and_the_time_of_each_stage(episode_run):
     """For benchmarking: every call's input and output tokens and its model requests, and the seconds each stage
-    of `teacher run` took (read, write, speak), in order."""
+    of `teacher run` took (read, narrate, tts), in order."""
     lines = [
         json.loads(line)
         for line in (episode_run.out / f"{PDF.stem}.trace.jsonl")
@@ -43,7 +43,7 @@ def test_the_trace_records_tokens_and_the_time_of_each_stage(episode_run):
         len(c["finish_reasons"]) == 1 and "messages" not in c for c in calls
     )  # one request: no history kept
     stages = [line for line in lines if "stage" in line]
-    assert [s["stage"] for s in stages] == ["read", "write", "speak"]
+    assert [s["stage"] for s in stages] == ["read", "narrate", "tts"]
     assert all(isinstance(s["seconds"], float) for s in stages)
     assert lines.index(stages[0]) == 0 and lines[-1] == stages[-1]
 
@@ -51,7 +51,7 @@ def test_the_trace_records_tokens_and_the_time_of_each_stage(episode_run):
 def test_the_trace_records_each_calls_model_and_time(llm, tmp_path):
     """Each trace line names the model and how long the call took, to see where a run's time goes."""
     (tmp_path / "x.outline.json").write_text(json.dumps(TREE))
-    cli("write", tmp_path / "x.outline.json", "--node", "Encoder", "--out", tmp_path)
+    cli("narrate", tmp_path / "x.outline.json", "--node", "Encoder", "--out", tmp_path)
     line = json.loads((tmp_path / "x.encoder.trace.jsonl").read_text().splitlines()[0])
     assert line["model"] == SMALL_MODEL and isinstance(line["seconds"], float)
 
@@ -89,13 +89,13 @@ def test_independent_calls_run_in_parallel_in_order(llm, tmp_path, monkeypatch):
     (tmp_path / "x.outline.json").write_text(json.dumps(TREE))
     cases = [{"tree": str(tmp_path / "x.outline.json"), "node": n, "facts": [f"{n} fact {i}." for i in "ab"]} for n in ("Encoder", "Loss", "Distance term")]  # fmt: skip
     (tmp_path / "cases.json").write_text(json.dumps(cases))
-    output = cli("eval", tmp_path / "cases.json", "--out", tmp_path)
+    output = cli("eval", tmp_path / "cases.json", "--note-rounds", 0, "--out", tmp_path)
     assert [line.split()[0] for line in output.splitlines()[2:5]] == [
         "Encoder",
         "Loss",
         "Distance",
     ]
-    assert re.search(r"total +6/6", output) and len(llm.of("judge")) == 6
+    assert re.search(r"total +6/6", output) and len(llm.of("judge")) == 12
     trace = (
         (tmp_path / next(p.name for p in tmp_path.glob("*.trace.jsonl")))
         .read_text()

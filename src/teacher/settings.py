@@ -6,19 +6,23 @@ from pathlib import Path
 PROMPTS = Path(__file__).parent / "prompts"
 
 SCRIPT_MODEL = "Qwen/Qwen3-14B-AWQ"
-VOICE_MODEL = "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice"
-VOICE_CLONE_MODEL = "Qwen/Qwen3-TTS-12Hz-1.7B-Base"  # imitates a reference clip (`teacher speak --clone`)
-VOICE = "ryan"
-LANGUAGE = "English"
-
+VOICE_MODEL = "hexgrad/Kokoro-82M"  # Apache-2.0, 82M parameters, runs in-process
+VOICE = "am_michael"  # a Kokoro voice: American male
 CONTEXT = 16384  # script model window; the largest prompt is about 13k tokens
-WORDS_PER_MINUTE = 150
+WORDS_PER_MINUTE = (
+    140  # Kokoro's pace at speed 1 (am_michael); scripts are sized by it for --minutes
+)
 SAMPLE_RATE = 24000
 PAUSE_SECONDS = 0.6  # silence between paragraphs
+CHAPTER_PAUSE_SECONDS = 1.5  # silence before a new chapter
+MIN_FREE_GPU_GIB = 15  # the script model peaks at about 14 GiB (weights 9.4, KV cache 3.5, CUDA graphs)
 
 PARALLEL = 16  # threads per parallel() call; each model's `parallel` profile setting caps its calls in flight
 
-JUDGE_MODEL = "claude-sonnet-5-5"  # `teacher eval`'s judge: fixed, so scores stay comparable as the writer changes
+# `teacher eval`'s judge: fixed, so scores stay comparable as the writer changes. Chosen with `teacher judge-bench`
+# against 883 recorded Claude verdicts: Qwen3-14B agrees best of the local candidates (kappa about 0.7), shows no
+# preference for its own narrations, and judges on the narrator's own server. Claude remains possible with --judge.
+JUDGE_MODEL = SCRIPT_MODEL
 CLAUDE_KEY = (
     "CLAUDE_API_KEY"  # read from the environment, or from a line in the repo's .env
 )
@@ -60,6 +64,32 @@ PROFILES = {
                 "top_k": 20,
                 "chat_template_kwargs": {"enable_thinking": True},
             },
+        },
+    },
+    # NVIDIA's Nemotron 3.5 Bolt E4B (post-trained Gemma 4), a candidate eval judge from another family than the
+    # Qwen narrator. Its card's sampling (temperature 1.0, top-p 0.95, both modes); BF16 weights quantised to FP8
+    # as they load, about 8 GB, to fit beside a modest KV cache.
+    "nvidia/NVIDIA-Nemotron-3.5-Bolt-": {
+        "parallel": 16,
+        "server": [
+            *"--quantization fp8 --gpu-memory-utilization 0.85 --max-num-seqs 16".split(),
+            *["--max-model-len", str(CONTEXT), "--reasoning-parser", "gemma4"],
+            *[
+                "--structured-outputs-config",
+                '{"backend": "xgrammar", "disable_any_whitespace": true}',
+            ],
+        ],
+        "writing": {
+            "max_tokens": 2048,
+            "temperature": 1.0,
+            "top_p": 0.95,
+            "extra_body": {"chat_template_kwargs": {"enable_thinking": False}},
+        },
+        "thinking": {
+            "max_tokens": 6144,
+            "temperature": 1.0,
+            "top_p": 0.95,
+            "extra_body": {"chat_template_kwargs": {"enable_thinking": True}},
         },
     },
     # Claude on the Anthropic API: thinking is always adaptive and effort sets its depth; no sampling settings.

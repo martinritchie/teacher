@@ -10,6 +10,7 @@ import json
 import threading
 import time
 from collections.abc import Callable, Iterable
+from typing import Any
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from pathlib import Path
@@ -20,6 +21,7 @@ from pydantic_ai import Agent, NativeOutput, capture_run_messages
 from pydantic_ai.exceptions import UnexpectedModelBehavior
 from pydantic_ai.messages import ModelMessagesTypeAdapter, ModelResponse
 from pydantic_ai.models import Model
+from pydantic_ai.settings import ModelSettings
 
 from teacher.settings import PARALLEL, PROMPTS, profile
 
@@ -60,7 +62,7 @@ def ask(agent: Agent, llm: Model, fallback=None, **values):
     tokens) gives the fallback instead of ending the run."""
     prompt, error = _render(f"{agent.name}_task.md", **values), None
     family = profile(llm.model_name)
-    settings = family["thinking" if _thinks[agent.name] else "writing"]
+    settings = family["thinking" if _thinks[str(agent.name)] else "writing"]
     slots = _slots.setdefault(
         llm.model_name, threading.BoundedSemaphore(family["parallel"])
     )
@@ -87,7 +89,9 @@ def ask(agent: Agent, llm: Model, fallback=None, **values):
     return output
 
 
-async def _run(agent: Agent, prompt: str, llm: Model, settings: dict, messages: list):
+async def _run(
+    agent: Agent, prompt: str, llm: Model, settings: ModelSettings, messages: list
+):
     """agent.run, with every request and reply of the run added to `messages`, even when it fails."""
     with capture_run_messages() as captured:
         try:
@@ -97,13 +101,19 @@ async def _run(agent: Agent, prompt: str, llm: Model, settings: dict, messages: 
 
 
 def ask_until(
-    agent: Agent, llm: Model, check: Callable, tries: int = 2, **values
-) -> object:
+    agent: Agent,
+    llm: Model,
+    check: Callable,
+    tries: int = 2,
+    clean: Callable = lambda output: output,
+    **values: Any,
+) -> Any:
     """Ask, and while `check(output)` finds problems and tries are left, ask again with the last output
-    as `draft` and the problems as `problems`. The last try is not checked."""
+    as `draft` and the problems as `problems`. The last try is not checked. `clean` is applied to every
+    output first, for fixes code can make without a model."""
     output, problems = None, []
     for attempt in range(tries):
-        output = ask(agent, llm, draft=output, problems=problems, **values)
+        output = clean(ask(agent, llm, draft=output, problems=problems, **values))
         if attempt == tries - 1 or not (problems := check(output)):
             return output
 

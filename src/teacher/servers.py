@@ -8,7 +8,7 @@ import subprocess
 import sys
 import threading
 import time
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager, nullcontext
 from pathlib import Path
 
@@ -24,7 +24,7 @@ from teacher.settings import CLAUDE_KEY, profile
 @contextmanager
 def serve_script_model(
     model: str, log: Path, server: str | None = None
-) -> Iterator[Model]:
+) -> Generator[Model]:
     """The script model for this block: Claude on the Anthropic API for claude-*, otherwise vLLM's
     OpenAI-compatible server, started here unless `server` (a URL from `teacher serve`) is given. A call the
     model's server rejects ends the run."""
@@ -81,38 +81,7 @@ def claude(model: str) -> Model:
 
 
 @contextmanager
-def serve_voice_model(
-    model: str, log: Path, temperature: float | None = None
-) -> Iterator[str]:
-    """The TTS model on vLLM-Omni's speech server. Yields its base URL. A `temperature` replaces the sampling
-    temperature of both token stages (vLLM-Omni's default for Qwen3-TTS is 0.9), through a copy of its deploy
-    config written next to the log."""
-    cmd = ["vllm-omni", "serve", model, "--omni"]
-    if temperature is not None:
-        cmd += [
-            "--deploy-config",
-            str(_tts_config(temperature, log.with_suffix(".deploy.yaml"))),
-        ]
-    with vllm_server(cmd, log) as url:
-        yield url
-
-
-def _tts_config(temperature: float, path: Path) -> Path:
-    import vllm_omni
-    import yaml
-
-    config = yaml.safe_load(
-        (Path(vllm_omni.__file__).parent / "deploy" / "qwen3_tts.yaml").read_text()
-    )
-    talker = config["stages"][0]
-    talker["default_sampling_params"]["temperature"] = temperature
-    talker["subtalker_sampling_params"]["temperature"] = temperature
-    path.write_text(yaml.safe_dump(config, sort_keys=False))
-    return path
-
-
-@contextmanager
-def vllm_server(cmd: list[str], log: Path, port: int | None = None) -> Iterator[str]:
+def vllm_server(cmd: list[str], log: Path, port: int | None = None) -> Generator[str]:
     """Run `cmd` (a vLLM server) on `port`, or a free one, for the length of
     the block; yields its URL. The server is stopped however the block ends, including on SIGTERM or SIGHUP (a
     `pkill`, a closed terminal). Its command and startup time go in the trace."""

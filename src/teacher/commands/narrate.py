@@ -1,4 +1,4 @@
-"""`teacher write`: narrate one node of an outline tree (every leaf under it), to iterate on the writing prompts."""
+"""`teacher narrate`: narrate one node of an outline tree (every leaf under it), to iterate on the writing prompts."""
 
 import re
 from pathlib import Path
@@ -12,7 +12,7 @@ from teacher.settings import SCRIPT_MODEL
 from teacher.tree import NOTE_ROUNDS, find_node, load_tree, narrate
 
 
-def write(
+def narrate_node(
     tree: Annotated[
         Path, typer.Argument(help="<name>.outline.json from `teacher outline`")
     ],
@@ -28,7 +28,7 @@ def write(
         NOTE_ROUNDS,
         help="Verify-and-revise rounds for each leaf's notes; 0 for one draft",
     ),
-    out: Path = typer.Option(Path("out/write"), help="Output directory"),
+    out: Path = typer.Option(Path("out/narrate"), help="Output directory"),
 ):
     """Narrate one node: <out>/<name>.<node>.md, with every model call in .trace.jsonl."""
     out.mkdir(parents=True, exist_ok=True)

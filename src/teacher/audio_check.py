@@ -5,6 +5,7 @@ the episode's speaker, and how its delivery (pitch, pitch range, pace) compares 
 import re
 from collections import Counter
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import soundfile
@@ -21,7 +22,7 @@ OUTLIER = (
 )
 
 
-def hear(
+def check_clips(
     clips: list[Path], texts: list[str], reference: Path | None = None
 ) -> list[dict]:
     """One row per clip: seconds, Whisper's transcript, its language, word error rate against the script, and
@@ -31,9 +32,20 @@ def hear(
 
     device = 0 if torch.cuda.is_available() else -1
     audio = [_load(c) for c in clips]
-    asr = pipeline("automatic-speech-recognition", model=ASR_MODEL, device=device)
-    heard = [asr({"raw": a, "sampling_rate": RATE}, chunk_length_s=30, return_timestamps=True,
-                 return_language=True, generate_kwargs={"task": "transcribe"}) for a in audio]  # fmt: skip
+    asr: Any = pipeline("automatic-speech-recognition", model=ASR_MODEL, device=device)
+
+    # Whisper's long-form transcription, and its timestamp mode, can loop on a clip, repeating text until the WER is
+    # meaningless. Each clip is heard as independent 15-second windows without timestamps; the language is read
+    # once, from the first window.
+    def transcribe(a: np.ndarray) -> dict:
+        step = 15 * RATE
+        text = [asr({"raw": a[i : i + step], "sampling_rate": RATE}, generate_kwargs={"task": "transcribe"})["text"].strip()
+                for i in range(0, len(a), step)]  # fmt: skip
+        first = asr({"raw": a[:step], "sampling_rate": RATE}, return_timestamps=True, return_language=True,
+                    generate_kwargs={"task": "transcribe"})  # fmt: skip
+        return {"text": " ".join(text), "chunks": first.get("chunks", [])}
+
+    heard = [transcribe(a) for a in audio]
     extract = AutoFeatureExtractor.from_pretrained(SPEAKER_MODEL)
     model = (
         WavLMForXVector.from_pretrained(SPEAKER_MODEL)
@@ -79,9 +91,15 @@ def hear(
         "pace",
     ):  # mark delivery that stands out from the rest of the episode
         values = np.array([r[key] for r in rows])
-        mad = np.median(np.abs(values - np.median(values))) or 1e-9
-        for r, v in zip(rows, values):
-            r[f"{key}_z"] = round(float(0.6745 * (v - np.median(values)) / mad), 1)
+        mad = np.median(np.abs(values - np.median(values)))
+        for r, v in zip(
+            rows, values
+        ):  # no spread (every clip evened to one pace): nothing stands out
+            r[f"{key}_z"] = (
+                round(float(0.6745 * (v - np.median(values)) / mad), 1)
+                if mad > 1e-3 * abs(np.median(values))
+                else 0.0
+            )
     return rows
 
 

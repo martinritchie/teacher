@@ -100,7 +100,7 @@ def test_notes_are_verified_and_revised_until_nothing_is_missing(llm, tmp_path):
     """A separate verifier checks each leaf's notes against its text; the note-taker revises with the problems, and the loop stops when the verifier finds none."""
     (tmp_path / "x.outline.json").write_text(json.dumps(TREE))
     llm.gaps = [["The notes miss the vector size."], []]
-    cli("write", tmp_path / "x.outline.json", "--node", "Encoder", "--out", tmp_path)
+    cli("narrate", tmp_path / "x.outline.json", "--node", "Encoder", "--out", tmp_path)
     takes, checks = llm.of("leaf notes"), llm.of("notes check")
     assert len(takes) == 2 and len(checks) == 2
     assert block(checks[0].prompt, "notes") == "- Note one a.\n- Note one b."
@@ -115,7 +115,7 @@ def test_note_rounds_caps_the_loop(llm, tmp_path):
     (tmp_path / "x.outline.json").write_text(json.dumps(TREE))
     llm.gaps = [["Missing one."], ["Missing two."], ["Missing three."]]
     cli(
-        "write",
+        "narrate",
         tmp_path / "x.outline.json",
         "--node",
         "Encoder",
@@ -127,7 +127,7 @@ def test_note_rounds_caps_the_loop(llm, tmp_path):
     assert len(llm.of("notes check")) == 2 and len(llm.of("leaf notes")) == 3
     llm.clear()
     cli(
-        "write",
+        "narrate",
         tmp_path / "x.outline.json",
         "--node",
         "Encoder",
@@ -147,10 +147,10 @@ def test_a_parents_own_text_is_narrated_before_its_children(llm, tmp_path):
         {"title": "Algorithm", "text": "The algorithm counts.", "children": []},
         {"title": "Theorem", "text": "The bias vanishes.", "children": []}]}]  # fmt: skip
     (tmp_path / "x.outline.json").write_text(json.dumps(tree))
-    cli("write", tmp_path / "x.outline.json", "--node", "5.3", "--out", tmp_path)
+    cli("narrate", tmp_path / "x.outline.json", "--node", "5.3", "--out", tmp_path)
     assert [source_of(c) for c in llm.of("leaf notes")] == [long_intro, "The algorithm counts.", "The bias vanishes."]  # fmt: skip
     tree[0]["text"] = "## 5.3 Batch\n"
     (tmp_path / "x.outline.json").write_text(json.dumps(tree))
     llm.clear()
-    cli("write", tmp_path / "x.outline.json", "--node", "5.3", "--out", tmp_path)
+    cli("narrate", tmp_path / "x.outline.json", "--node", "5.3", "--out", tmp_path)
     assert len(llm.of("leaf notes")) == 2  # a bare heading is not narrated

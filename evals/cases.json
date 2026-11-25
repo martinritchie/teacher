@@ -128,9 +128,9 @@
     "facts": [
       "The head refines a noise vector through a stack of residual MLP blocks.",
       "Each block fuses the current representation with the Transformer's hidden state through two linear layers.",
-      "Each block then applies a SwiGLU layer whose intermediate size is the Transformer's hidden size.",
+      "Each block then applies a SwiGLU layer.",
       "A residual connection adds each block's input to its output.",
-      "A final linear layer projects the result to the size of the latent vector."
+      "A final linear layer projects the result to the size of the output vector."
     ]
   },
   {

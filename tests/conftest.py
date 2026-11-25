@@ -24,14 +24,17 @@ import semchunk
 import teacher.commands.run as run_mod
 import teacher.episode as episode
 import teacher.llm as llm_mod
+import teacher.part as part
 import teacher.servers as servers
 import teacher.source as source
-import teacher.speech as speech
+import teacher.tts as tts_mod
 from teacher.settings import (
     SAMPLE_RATE,
 )
 from teacher.testing import (
     CONTRIBUTIONS,
+    CREDITS,
+    INTRODUCTION,
     SHORT_MARKDOWN,
     PDF,
     PHASES,
@@ -64,6 +67,12 @@ def unit(request, monkeypatch):
 def llm(monkeypatch):
     """No server process; the script model is a FunctionModel. Each agent's instructions identify its phase."""
     return _llm(monkeypatch)
+
+
+@pytest.fixture
+def checked(monkeypatch):
+    """A listener and a checker review each part (part.CHECK_PARTS), for the tests of that loop."""
+    monkeypatch.setattr(part, "CHECK_PARTS", True)
 
 
 @pytest.fixture
@@ -109,15 +118,21 @@ def _unit(monkeypatch):
 
 def _llm(monkeypatch):
     calls = Calls()
-    calls.verdicts, calls.abstracts, calls.parts, calls.contributions = [], [], [], []
+    calls.verdicts, calls.introductions, calls.parts, calls.contributions = (
+        [],
+        [],
+        [],
+        [],
+    )
+    calls.credits = []
     calls.details, calls.splits, calls.verdict, calls.started = [], {}, "stated", 0
-    calls.gaps, calls.quote = [], None
+    calls.gaps, calls.quote, calls.unsupported = [], None, []
     calls.settings, calls.components = {}, None
 
     def reply(messages, info: AgentInfo, model: str):
         if calls.error:
             raise calls.error
-        phase = PHASES[info.instructions.splitlines()[0]]
+        phase = PHASES[(info.instructions or "").splitlines()[0]]
         prompt = str(messages[-1].parts[-1].content)  # a retry's content is a list
         calls.settings[phase] = info.model_settings
         calls.append(SimpleNamespace(phase=phase, prompt=prompt, model=model))
@@ -128,13 +143,15 @@ def _llm(monkeypatch):
             component(1, list(range(1, n + 1)))
         ]  # one, to keep the calls few
         text = {
-            "abstract": lambda: json.dumps({"text": calls.abstracts.pop(0) if calls.abstracts else block(prompt, "abstract")}),
+            "introduction": lambda: json.dumps({"text": calls.introductions.pop(0) if calls.introductions else INTRODUCTION}),
+            "credits": lambda: json.dumps(calls.credits.pop(0) if calls.credits else CREDITS),
             "contributions": lambda: json.dumps(calls.contributions.pop(0) if calls.contributions else CONTRIBUTIONS),
             "notes": lambda: f"Notes {k}.",
             "outline": lambda: json.dumps(method(components)),
             "judge": lambda: json.dumps({"verdict": calls.verdict, "quote": calls.quote if calls.quote is not None else block(prompt, "narration").split("\n")[0]}),
             "leaf notes": lambda: json.dumps({"notes": [f"Note {spelled(k)} a.", f"Note {spelled(k)} b."]}),
             "notes check": lambda: json.dumps({"problems": calls.gaps.pop(0) if calls.gaps else []}),
+            "grounding": lambda: json.dumps({"problems": calls.unsupported.pop(0) if calls.unsupported else []}),
             "split": lambda: json.dumps({"subsections": [{"title": t, "starts_with": w} for t, w in calls.splits.get(block(prompt, "path").split(" > ")[-1], calls.splits.get("*", []))]}),
             "detail": lambda: (lambda d: d if isinstance(d, str) else json.dumps(d))(calls.details.pop(0) if calls.details else {"purpose": f"Purpose {k}.", "inputs": "x", "steps": [f"Detailed step {k}."], "outputs": "y"}),
             "method": lambda: calls.parts.pop(0) if calls.parts else f"Part {spelled(k)}.",
@@ -145,7 +162,10 @@ def _llm(monkeypatch):
 
     @contextmanager
     def no_server(cmd, log, port=None):
-        calls.started, calls.server = calls.started + 1, cmd
+        calls.started += 1
+        calls.server = (
+            cmd if cmd[0] == "vllm" else calls.server
+        )  # the script model's, not the voice's
         yield "http://server"
 
     def stub(
@@ -170,14 +190,12 @@ def _llm(monkeypatch):
 def _tts(monkeypatch):
     calls = []
 
-    def speak(paragraphs, voice, server):
-        calls.append(
-            SimpleNamespace(script="\n\n".join(paragraphs), voice=voice.speaker)
-        )
+    def synthesize(paragraphs, voice):
+        calls.append(SimpleNamespace(script="\n\n".join(paragraphs), voice=voice.name))
         return [
             np.zeros(SAMPLE_RATE // 100) for _ in paragraphs
         ]  # a short MP3 encodes quickly
 
-    monkeypatch.setattr(run_mod, "speak", speak)
-    monkeypatch.setattr(speech, "PAUSE_SECONDS", 0.01)
+    monkeypatch.setattr(run_mod, "synthesize", synthesize)
+    monkeypatch.setattr(tts_mod, "PAUSE_SECONDS", 0.01)
     return calls
