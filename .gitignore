@@ -40,3 +40,7 @@ out/
 
 # graphify knowledge graph
 graphify-out/
+
+# Local agent skills and settings
+.agents/
+.claude/
