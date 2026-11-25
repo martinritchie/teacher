@@ -30,7 +30,7 @@ from teacher.speech import unspoken
 
 MAX_SECTION_CHARS = 12000  # about 3k tokens of abstract, introduction or conclusion
 COPIED_WORDS = 8  # a run of this many words taken from the abstract is a quotation, not a paraphrase
-MAX_NAMED = 6  # authors named per institution; the rest are counted
+MAX_NAMED = 10  # authors named per institution; the rest are counted
 SPOKEN = "Plain spoken English: no symbols, LaTeX or markup; numbers and acronyms as they are said."
 
 

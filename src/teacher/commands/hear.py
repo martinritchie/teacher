@@ -6,6 +6,7 @@ from typing import Annotated
 import typer
 
 from teacher.hearing import hear, summary
+from teacher.speech import make_speakable
 
 
 def hear_clips(
@@ -21,7 +22,7 @@ def hear_clips(
 ):
     """Score every clip; print a table and a summary, and write them to <name>.hear.md beside the folder."""
     script = clips.with_name(clips.name.removesuffix(".clips") + ".md")
-    texts = [p.strip() for p in script.read_text().split("\n\n") if p.strip()]
+    texts = make_speakable(script.read_text())
     files = sorted(clips.glob("*.wav"))
     if len(files) != len(texts):
         raise typer.BadParameter(
